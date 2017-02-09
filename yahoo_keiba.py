@@ -10,11 +10,11 @@ from bs4 import BeautifulSoup
 from pprint import pprint
 
 
-TAG = re.compile((r'<[^>]*?>'))
-SPACE = re.compile((r'[\s]+'))
-NEWLINE = re.compile(r'[\n]+')
+TAG = re.compile(r'<[^>]*?>')
+SPACE = re.compile(r'\s+')
+NEWLINE = re.compile(r'\n+')
 SYMBOL = re.compile(r'[\(\)\[\]/\|]')
-ALLOWED_URL = re.compile(r'/race/result/|/directory/horse/')
+ALLOWED_URL = re.compile(r'/race/result/|/directory/horse/|/schedule/list/')
 
 RACE_INFO = ('date',
              '',
@@ -46,7 +46,11 @@ class YahooKeibaCrawler(object):
             raise
 
         # extract urls and results of race and horse, separately
-        if '/race/result/' in url:
+        if self.base_url == url:
+            urls = self._extract_urls(soup)
+            race_info = None
+            race_rslt = None
+        elif '/race/result/' in url:
             urls = self._extract_urls(soup)
             race_info = self._extract_race_info(soup)
             race_rslt = self._extract_race_rslt(soup)
@@ -69,10 +73,10 @@ class YahooKeibaCrawler(object):
         race_info = soup.find('table', {'id': 'raceHead', 'class': 'mgnBM'})
         race_info = race_info.find('div', {'id': 'raceTit'})
         race_img = race_info.find_all('img')
-        race_info = race_info.text.split('|')[: 5]
-        race_info[3] += race_img[0]['alt']
-        race_info[4] += race_img[1]['alt']
-        return race_info
+        race_info = race_info.text.split('|')[: 3]
+        race_info.append(race_img[0]['alt'])
+        race_info.append(race_img[1]['alt'])
+        return self._format_data(race_info)
 
     def _extract_race_rslt(self, soup):
         denmas = soup.find('table', {'id': 'raceScore', 'class': 'dataLs mgnBS'})
@@ -82,8 +86,17 @@ class YahooKeibaCrawler(object):
         for denma in denmas:
             cols = denma.find_all('td')
             cols = [re.sub(TAG, ',', str(c)) for c in cols]
-            race_rslt.append(cols)
+            race_rslt.append(self._format_data(cols))
         return race_rslt
+
+    def _format_data(self, data):
+        formatted_data = []
+        for d in data:
+            d = re.sub(r' ', '', d)
+            d = re.split(re.compile(r'[\n,（）・\(\)/]+'), d)
+            d = list(filter(lambda x: len(x), d))
+            formatted_data.extend(d)
+        return formatted_data
 
     def _check_columns(self, cols):
         columns = []
