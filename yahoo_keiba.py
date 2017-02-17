@@ -10,16 +10,16 @@ from bs4 import BeautifulSoup
 from pprint import pprint
 
 
+SPAN_TAG = re.compile(r'<span class="scdItem">')
 TAG = re.compile(r'<[^>]*?>')
-SPACE = re.compile(r'\s+')
 NEWLINE = re.compile(r'\n+')
-SYMBOL = re.compile(r'[\(\)\[\]/\|]')
+SPACE = re.compile(r'\s+')
+BRACKET = re.compile(r'[\(\)\[\]]')
 ALLOWED_URL = re.compile(r'/race/result/|/directory/horse/|/schedule/list/')
 
 RACE_INFO = ('date',
              '',
              )
-
 RACE_RSLT = ('arrival_order',
              'frame_num',
              'horse_num',
@@ -85,8 +85,13 @@ class YahooKeibaCrawler(object):
         race_rslt = []
         for denma in denmas:
             cols = denma.find_all('td')
-            cols = [re.sub(TAG, ',', str(c)) for c in cols]
-            race_rslt.append(self._format_data(cols))
+            cols = [re.sub(SPAN_TAG, ',', str(c)) for c in cols]
+            cols = [e for c in cols for e in c.split(',')]
+            # eliminate symbols
+            cols = [re.sub(TAG, '', c) for c in cols]
+            cols = [re.sub(NEWLINE, '', c) for c in cols]
+            cols = [re.sub(SPACE, '', c) for c in cols]
+            race_rslt.append(cols)
         return race_rslt
 
     def _format_data(self, data):
@@ -116,3 +121,5 @@ if __name__ == '__main__':
     pprint(urls)
     pprint(race_info)
     pprint(race_rslt)
+    for race in race_rslt:
+        print(len(race))
