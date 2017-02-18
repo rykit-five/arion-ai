@@ -10,29 +10,12 @@ from bs4 import BeautifulSoup
 from pprint import pprint
 
 
-SPAN_TAG = re.compile(r'<span class="scdItem">')
 TAG = re.compile(r'<[^>]*?>')
+SPAN_TAG = re.compile(r'<span class="scdItem">')
 NEWLINE = re.compile(r'\n+')
 SPACE = re.compile(r'\s+')
-BRACKET = re.compile(r'[\(\)\[\]]')
-ALLOWED_URL = re.compile(r'/race/result/|/directory/horse/|/schedule/list/')
 
-RACE_INFO = ('date',
-             '',
-             )
-RACE_RSLT = ('arrival_order',
-             'frame_num',
-             'horse_num',
-             'horse_info',
-             'time',
-             'passing_last3f',
-             'jocky',
-             'odds',
-             'trainer',
-             )
-
-
-class YahooKeibaCrawler(object):
+class YahooKeibaScraper(object):
 
     def __init__(self, base_url):
         self.base_url = base_url
@@ -45,81 +28,114 @@ class YahooKeibaCrawler(object):
             print('could not find url:', url)
             raise
 
-        # extract urls and results of race and horse, separately
-        if self.base_url == url:
-            urls = self._extract_urls(soup)
-            race_info = None
-            race_rslt = None
-        elif '/race/result/' in url:
-            urls = self._extract_urls(soup)
-            race_info = self._extract_race_info(soup)
-            race_rslt = self._extract_race_rslt(soup)
-        elif '/directory/horse/' in url:
-            urls = self._extract_urls(soup)
-            race_info = None
-            race_rslt = None
-        else:
-            urls = None
-            race_info = None
-            race_rslt = None
+        # extract race information and race results
+        race_info = self._extract_race_info(soup)
+        race_rslts = self._extract_race_rslts(soup)
 
-        return urls, race_info, race_rslt
+        # test
+        data = self._horse_info(race_rslts[0]['horse_info'])
+        pprint(data)
 
-    def _extract_urls(self, soup):
-        urls = soup.find_all('a', href=ALLOWED_URL)
-        return [self.base_url + u['href'] for u in urls]
+        return race_info, race_rslts
 
     def _extract_race_info(self, soup):
-        race_info = soup.find('table', {'id': 'raceHead', 'class': 'mgnBM'})
-        race_info = race_info.find('div', {'id': 'raceTit'})
+        labels = ('race_no',
+                  'date',
+                  'race_schedule',
+                  'stating_time',
+                  'race_title',
+                  'race_detail',
+                  'weather',
+                  'condition',
+                  )
+        race_info = soup.find('div', {'id': 'raceTit'})
         race_img = race_info.find_all('img')
         race_info = race_info.text.split('|')[: 3]
         race_info.append(race_img[0]['alt'])
         race_info.append(race_img[1]['alt'])
-        return self._format_data(race_info)
+        race_info = [e for r in race_info for e in re.split(NEWLINE, r)]
+        race_info = [re.sub(NEWLINE, '', r.strip()) for r in race_info]
+        race_info = list(filter(lambda x: len(x), race_info))
+        race_info = dict(zip(labels, race_info))
+        return race_info
 
-    def _extract_race_rslt(self, soup):
+    def _extract_race_rslts(self, soup):
+        labels = ('arrival_order',
+                  'frame_no',
+                  'horse_no',
+                  'horse',
+                  'horse_info',
+                  'time',
+                  'goal_diff',
+                  'passing_order',
+                  'last3f_time',
+                  'jockey',
+                  'jockey_weight',
+                  'popularity',
+                  'odds',
+                  'trainer',
+                  )
         denmas = soup.find('table', {'id': 'raceScore', 'class': 'dataLs mgnBS'})
         denmas = denmas.find('tbody')
         denmas = denmas.find_all('tr')
-        race_rslt = []
+        race_rslts = []
         for denma in denmas:
             cols = denma.find_all('td')
-            cols = [re.sub(SPAN_TAG, ',', str(c)) for c in cols]
-            cols = [e for c in cols for e in c.split(',')]
-            # eliminate symbols
+            cols = [e for c in cols for e in re.split(SPAN_TAG, str(c))]
             cols = [re.sub(TAG, '', c) for c in cols]
             cols = [re.sub(NEWLINE, '', c) for c in cols]
-            cols = [re.sub(SPACE, '', c) for c in cols]
-            race_rslt.append(cols)
-        return race_rslt
+            cols = dict(zip(labels, cols))
+            race_rslts.append(cols)
+        return race_rslts
 
-    def _format_data(self, data):
-        formatted_data = []
-        for d in data:
-            d = re.sub(r' ', '', d)
-            d = re.split(re.compile(r'[\n,（）・\(\)/]+'), d)
-            d = list(filter(lambda x: len(x), d))
-            formatted_data.extend(d)
-        return formatted_data
+    def _date(self, date):
+        labels = ('date',
+                  'week_of_day')
+        date = re.sub(re.compile(r'）'), '', date)
+        data = re.split(re.compile(r'（'), date)
+        return dict(zip(labels, data))
 
-    def _check_columns(self, cols):
-        columns = []
-        for col in cols:
-            elems = col.split(',')
-            elems = [e for e in elems if e != '']
-            columns.extend(elems)
-        return columns
+    def _race_title(self, race_title):
+        labels = ('title',
+                  'grade')
+        race_title = re.sub(re.compile(r'）'), '', race_title)
+        data = re.split(re.compile(r'（'), race_title)
+        return dict(zip(labels, data))
+
+    def _race_detail(self, race_detail):
+        labels = ('surface',
+                  'course',
+                  'length')
+        data = re.split(re.compile(r'・|\s'), race_detail)
+        return dict(zip(labels, data))
+
+    def _horse_info(self, horse_info):
+        labels = ('sex_age',
+                  'horse_weight',
+                  'weitht_diff',
+                  'blinker')
+        horse_info = re.sub(re.compile(r'\)'), '', horse_info)
+        data = re.split(re.compile(r'/|\('), horse_info)
+        return dict(zip(labels, data))
+
+    def _starting_time(self, starting_time):
+        return re.sub(re.compile(r'発走'), '', starting_time)
+
+    def _odds(self, odds):
+        return re.sub(re.compile(r'\(|\)'), '', odds)
+
+    def _jockey(self, jockey):
+        return re.sub(SPACE, '', jockey)
+
+    def _trainer(self, trainer):
+        return re.sub(SPACE, '', trainer)
 
 
 if __name__ == '__main__':
     base_url = 'https://keiba.yahoo.co.jp'
-    url = 'https://keiba.yahoo.co.jp/race/result/1608040711/'
-    crawler = YahooKeibaCrawler(base_url)
-    urls, race_info, race_rslt = crawler.fetch_url(url)
+    url = 'https://keiba.yahoo.co.jp/race/result/1605010810/'
+    scraper = YahooKeibaScraper(base_url)
+    race_info, race_rslts = scraper.fetch_url(url)
 
-    pprint(urls)
     pprint(race_info)
-    pprint(race_rslt)
-    for race in race_rslt:
-        print(len(race))
+    pprint(race_rslts)
