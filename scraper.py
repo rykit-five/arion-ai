@@ -15,24 +15,12 @@ from sqlite3 import Error
 class Scraper(metaclass=ABCMeta):
 
     def __init__(self):
-        # TODO: get_req, conv_req_to_soupを統合
         pass
 
-    def get_req(self, url):
+    def ret_html(self, url):
         req = requests.get(url)
-        return req
-
-    def conv_req_to_soup(self, req):
         soup = BeautifulSoup(req.content, "html.parser")
         return soup
-
-    # @abstractmethod
-    # def extract_data(self, soup):
-    #     raise NotImplementedError
-    #
-    # @abstractmethod
-    # def parse_data(self, soup):
-    #     raise NotImplementedError
 
 
 class ResultScaraper(Scraper):
@@ -202,8 +190,7 @@ class Register:
 if __name__ == "__main__":
     url = "https://keiba.yahoo.co.jp/race/result/1906030211/"
     scraper = ResultScaraper()
-    request = scraper.get_req(url)
-    soup = scraper.conv_req_to_soup(request)
+    soup = scraper.ret_html(url)
     scores = scraper.extract_scores(soup)
     scores = scraper.parse_scores(scores)
     # pprint(scores)
