@@ -4,20 +4,18 @@
 import re
 import requests
 from bs4 import BeautifulSoup
-from pprint import pprint
 from enum import Enum, auto
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
-import sqlite3
-from sqlite3 import Error
+from pprint import pprint
 
 
-class Scraper(metaclass=ABCMeta):
+class Scraper(object):
 
     def __init__(self):
         pass
 
-    def ret_html(self, url):
+    def retrieve_html(self, url):
         req = requests.get(url)
         soup = BeautifulSoup(req.content, "html.parser")
         return soup
@@ -50,17 +48,10 @@ class ResultScaraper(Scraper):
         "horse_b",
     )
 
-    passing_order_labels = (
-        "passing_order1st",
-        "passing_order2nd",
-        "passing_order3rd",
-        "passing_order4th",
-    )
-
     def __init__(self):
         super(ResultScaraper, self).__init__()
 
-    def extract_race_header(self, soup):
+    def extract_race_info(self, soup):
         pass
 
     def extract_scores(self, soup):
@@ -91,9 +82,8 @@ class ResultScaraper(Scraper):
     def parse_scores(self, scores):
         for score in scores:
             score["time"] = self._parse_time(score["time"])
-            # score.update(self._parse_horse_info(score["horse_info"]))
-            # score.update(self._parse_passing_order(score["passing_order"]))
-            score = self._parse_digit(score)
+            # score["horse_info"] = self._parse_horse_info(score["horse_info"])
+            self._conv_digit(score)
         return scores
 
     def _parse_horse_info(self, horse_info):
@@ -103,103 +93,39 @@ class ResultScaraper(Scraper):
         else:
             raise
 
-    def _parse_passing_order(self, passing_order):
-        passing_orders = re.split("-", passing_order)
-        if passing_order:
-            return OrderedDict(zip(self.passing_order_labels, passing_orders))
-        else:
-            raise
-
     def _parse_time(self, time):
-        times = time.split(".")
-        sec = "{}.{}".format(int(times[0]) * 60 + int(times[1]), int(time[2]))
+        t = time.split(".")
+        if len(t) == 2:
+            sec = float(time)
+        elif len(t) == 3:
+            sec = "{}.{}".format(float(t[0]) * 60.0 + float(t[1]), float(t[2]))
         return sec
 
-    def _parse_digit(self, score):
+    def _conv_digit(self, score):
         for k, v in score.items():
-            if v.isdigit():
-                score[k] = int(v)
-            elif v == '':
+            if v == '':
                 score[k] = None
+            elif v.isdigit():
+                score[k] = int(v)
             else:
                 try:
                     score[k] = float(v)
                 except ValueError:
                     pass
-        return score
 
 
-class Register:
-
-    def __init__(self, db_file):
-        conn = None
-        try:
-            conn = sqlite3.connect(db_file)
-        except Error as e:
-            print(e)
-        self.conn = conn
-        self.curs = self.conn.cursor()
-
-    def create(self, reset=False):
-        if reset:
-            self.curs.execute('''DROP TABLE IF EXISTS scores''')
-        self.curs.execute('''CREATE TABLE IF NOT EXISTS scores (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                arrival_order INTEGER NOT NULL,
-                                frame_num INTEGER NOT NULL,
-                                horse_num INTEGER NOT NULL, 
-                                horse_name TEXT NOT NULL, 
-                                horse_info TEXT NOT NULL,
-                                arrival_diff TEXT,
-                                time REAL NOT NULL,
-                                last3f_time REAL NOT NULL,
-                                passing_order TEXT NOT NULL,
-                                jockey_name TEXT NOT NULL,
-                                jockey_weight REAL NOT NULL,
-                                odds REAL NOT NULL,
-                                popularity REAL NOT NULL,
-                                trainer_name TEXT NOT NULL
-                             )''')
-        self.conn.commit()
-
-    def close(self):
-        self.curs.close()
-        self.conn.close()
-
-    def insert(self, score):
-        sql = '''INSERT INTO scores (
-                    arrival_order,
-                    frame_num,
-                    horse_num,
-                    horse_name,
-                    horse_info,
-                    arrival_diff,
-                    time,
-                    last3f_time,
-                    passing_order,
-                    jockey_name,
-                    jockey_weight,
-                    odds,
-                    popularity,
-                    trainer_name
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
-        self.curs.execute(sql, score)
-        self.conn.commit()
+def test_scraper(url):
+    scraper = ResultScaraper()
+    soup = scraper.retrieve_html(url)
+    scores = scraper.extract_scores(soup)
+    scores = scraper.parse_scores(scores)
+    return scores
 
 
 if __name__ == "__main__":
     url = "https://keiba.yahoo.co.jp/race/result/1906030211/"
-    scraper = ResultScaraper()
-    soup = scraper.ret_html(url)
-    scores = scraper.extract_scores(soup)
-    scores = scraper.parse_scores(scores)
-    # pprint(scores)
+    scores = test_scraper(url)
+    pprint(scores)
 
-    db_file = "test_db.sqlite"
-    reg = Register(db_file)
-    reg.create(reset=True)
-    for score in scores:
-        # pprint(score.values())
-        reg.insert(tuple(score.values()))
 
 
