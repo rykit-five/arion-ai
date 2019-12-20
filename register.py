@@ -21,8 +21,8 @@ class Register:
         self.curs.execute('''CREATE TABLE IF NOT EXISTS scores (
                                 race_id INTEGER,
                                 arrival_order INTEGER NOT NULL,
-                                frame_num INTEGER NOT NULL,
-                                horse_num INTEGER NOT NULL, 
+                                frame_no INTEGER NOT NULL,
+                                horse_no INTEGER NOT NULL, 
                                 horse_name TEXT NOT NULL, 
                                 horse_info TEXT NOT NULL,
                                 arrival_diff TEXT,
@@ -45,8 +45,8 @@ class Register:
     def insert(self, score):
         sql = '''INSERT INTO scores (
                     arrival_order,
-                    frame_num,
-                    horse_num,
+                    frame_no,
+                    horse_no,
                     horse_name,
                     horse_info,
                     arrival_diff,
@@ -66,15 +66,15 @@ class Register:
         pass
 
 
-def test_register(scores):
+def test_register(score_dicts):
     db_file = "test_db.sqlite"
     reg = Register(db_file)
     reg.create(reset=False)
-    for score in scores:
-        reg.insert(tuple(score.values()))
+    for score_dict in score_dicts:
+        reg.insert(tuple(score_dict.values()))
 
 
 if __name__ == '__main__':
     url = "https://keiba.yahoo.co.jp/race/result/1705050211"
-    scores = scraper.test_scraper(url)
-    test_register(scores)
+    score_dicts = scraper.test_scraper(url)
+    test_register(score_dicts)

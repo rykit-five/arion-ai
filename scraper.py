@@ -23,10 +23,19 @@ class Scraper(object):
 
 class ResultScaraper(Scraper):
 
+    racehead_labels = (
+        "race_no",
+        "date",
+        "meta",
+        "title",
+        "weather",
+        "condition",
+    )
+
     score_labels = (
         "arrival_order",
-        "frame_num",
-        "horse_num",
+        "frame_no",
+        "horse_no",
         "horse_name",
         "horse_info",
         "arrival_diff",
@@ -51,11 +60,48 @@ class ResultScaraper(Scraper):
     def __init__(self):
         super(ResultScaraper, self).__init__()
 
-    def extract_race_info(self, soup):
+    def extract_racehead(self, soup):
+        racehead = []
+        # <td>タグ
+        td_tags = soup.select('div#raceTit td')
+        for td_tag in td_tags:
+            # <p>, <h1>タグ
+            p_h1_tags = td_tag.select('p, h1')
+            if p_h1_tags:
+                for p_h1_tag in p_h1_tags:
+                    racehead.append(p_h1_tag.get_text().strip("()\t\n\x0b\x0c\r "))
+            else:
+                racehead.append(td_tag.get_text().strip("()\t\n\x0b\x0c\r "))
+            # <img>タグ
+            img_tags = td_tag.select('p > img')
+            if img_tags:
+                for img_tag in img_tags:
+                    racehead.append(img_tag['alt'])
+        assert len(self.racehead_labels) == len(racehead)
+        racehead_dict = OrderedDict(zip(self.racehead_labels, racehead))
+        return racehead_dict
+
+    def parse_racehead(self, racehead_dicts):
+        racehead_dicts["race_no"] = re.sub(r"R", "", racehead_dicts["race_no"])
+        racehead_dicts["date"] = self._parse_date(racehead_dicts["date"])
+        # racehead_dicts["meta"] = self._parse_meta(racehead_dicts["meta"])
+        # racehead_dicts["title"] = self._parse_title(racehead_dicts["title"])
+        # self._conv_digit(racehead_dicts)
+
+    def _parse_date(self, date):
+        date_elems = date.split("|")
+
+        print(date_elems)
+        pass
+
+    def _parse_meta(self, meta):
+        pass
+
+    def _parse_title(self, title):
         pass
 
     def extract_scores(self, soup):
-        scores = []
+        score_dicts = []
         table = soup.select("table#raceScore")[0]
         for tr_tag in table.select("tbody > tr"):
             score = []
@@ -75,9 +121,10 @@ class ResultScaraper(Scraper):
                 if td_text:
                     score.append(td_text)
             # データを保存
-            score = OrderedDict(zip(self.score_labels, score))
-            scores.append(score)
-        return scores
+            assert len(self.score_labels) == len(score)
+            score_dict = OrderedDict(zip(self.score_labels, score))
+            score_dicts.append(score_dict)
+        return score_dicts
 
     def parse_scores(self, scores):
         for score in scores:
@@ -117,15 +164,27 @@ class ResultScaraper(Scraper):
 def test_scraper(url):
     scraper = ResultScaraper()
     soup = scraper.retrieve_html(url)
-    scores = scraper.extract_scores(soup)
-    scores = scraper.parse_scores(scores)
-    return scores
+    score_dicts = scraper.extract_scores(soup)
+    score_dicts = scraper.parse_scores(score_dicts)
+    return score_dicts
+
+
+def test_racehead(url):
+    scraper = ResultScaraper()
+    soup = scraper.retrieve_html(url)
+    racehead_dict = scraper.extract_racehead(soup)
+    pprint(racehead_dict)
+    racehead_dict = scraper.parse_racehead(racehead_dict)
+    return racehead_dict
 
 
 if __name__ == "__main__":
     url = "https://keiba.yahoo.co.jp/race/result/1906030211/"
-    scores = test_scraper(url)
-    pprint(scores)
+    # score_dicts = test_scraper(url)
+    # pprint(score_dicts)
+
+    racehead_dict = test_racehead(url)
+    pprint(racehead_dict)
 
 
 
