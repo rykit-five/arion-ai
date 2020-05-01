@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from enum import Enum, auto
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
+from datetime import datetime, timedelta
 from pprint import pprint
 
 
@@ -22,14 +23,28 @@ class Scraper(object):
 
 
 class ResultScaraper(Scraper):
-
     racehead_labels = (
         "race_no",
-        "date",
+        "tit",
         "meta",
         "title",
         "weather",
         "condition",
+    )
+
+    tit_labels = (
+        "date",
+        "week",
+        "kai",
+        "lacation",
+        "nichi",
+        "start_time",
+    )
+
+    meta_labels = (
+        "cource",
+        "clockwise",
+        "distance",
     )
 
     score_labels = (
@@ -57,6 +72,13 @@ class ResultScaraper(Scraper):
         "horse_b",
     )
 
+    passing_order_labels = (
+        "passing_order_1st",
+        "passing_order_2nd",
+        "passing_order_3rd",
+        "passing_order_4th",
+    )
+
     def __init__(self):
         super(ResultScaraper, self).__init__()
 
@@ -73,7 +95,7 @@ class ResultScaraper(Scraper):
             else:
                 racehead.append(td_tag.get_text().strip("()\t\n\x0b\x0c\r "))
             # <img>タグ
-            img_tags = td_tag.select('p > img')
+            img_tags = td_tag.select("img")
             if img_tags:
                 for img_tag in img_tags:
                     racehead.append(img_tag['alt'])
@@ -83,22 +105,13 @@ class ResultScaraper(Scraper):
 
     def parse_racehead(self, racehead_dicts):
         racehead_dicts["race_no"] = re.sub(r"R", "", racehead_dicts["race_no"])
-        racehead_dicts["date"] = self._parse_date(racehead_dicts["date"])
+        # racehead_dicts["tit"] = self.parse_tit(racehead_dicts["tit"])
+        # racehead_dict["meta"] = self.parse_meta(recehead_dicts["meta"])
+        self.parse_date(racehead_dicts["date"])
+
         # racehead_dicts["meta"] = self._parse_meta(racehead_dicts["meta"])
         # racehead_dicts["title"] = self._parse_title(racehead_dicts["title"])
-        # self._conv_digit(racehead_dicts)
-
-    def _parse_date(self, date):
-        date_elems = date.split("|")
-
-        print(date_elems)
-        pass
-
-    def _parse_meta(self, meta):
-        pass
-
-    def _parse_title(self, title):
-        pass
+        # self._to_digit(racehead_dicts)
 
     def extract_scores(self, soup):
         score_dicts = []
@@ -128,37 +141,66 @@ class ResultScaraper(Scraper):
 
     def parse_scores(self, scores):
         for score in scores:
-            score["time"] = self._parse_time(score["time"])
-            # score["horse_info"] = self._parse_horse_info(score["horse_info"])
-            self._conv_digit(score)
+            score["time"] = self._to_sec(score["time"])
+            # score["last3f_time"] = self._to_sec(score["last3f_time"])
+            score["horse_info"] = self._parse_horse_info(score["horse_info"])
+            score["passing_order"] = self._parse_passing_order(score["passing_order"])
+
+            for k, v in score.items():
+                if isinstance(v, dict):
+                    for _k, _v in v.items():
+                        v[_k] = self._str_to_digit(_v)
+                else:
+                    score[k] = self._str_to_digit(v)
+
         return scores
 
     def _parse_horse_info(self, horse_info):
         s = re.search("(牡|牝|せん)(\d+)/(\d+)\(([\+\-]?\d+)\)/(B?)", horse_info)
         if s:
-            return OrderedDict(zip(self.horse_info_labels, s.groups()))
+            return dict(zip(self.horse_info_labels, s.groups()))
         else:
             raise
 
-    def _parse_time(self, time):
-        t = time.split(".")
-        if len(t) == 2:
-            sec = float(time)
-        elif len(t) == 3:
-            sec = "{}.{}".format(float(t[0]) * 60.0 + float(t[1]), float(t[2]))
+    def _parse_passing_order(self, passing_order):
+        s = passing_order.split("-")
+        if s:
+            return dict(zip(self.passing_order_labels, s))
+
+    def _to_sec(self, time):
+        base_time = datetime.strptime("00.00.0", "%M.%S.%f")
+        time = datetime.strptime(time, "%M.%S.%f")
+        sec = timedelta.total_seconds(time - base_time)
         return sec
 
-    def _conv_digit(self, score):
-        for k, v in score.items():
-            if v == '':
-                score[k] = None
-            elif v.isdigit():
-                score[k] = int(v)
-            else:
-                try:
-                    score[k] = float(v)
-                except ValueError:
-                    pass
+    def _str_to_digit(self, data):
+        if not isinstance(data, str):
+            return data
+
+        if data == '':
+            data = None
+        elif data.isdigit():
+            data = int(data)
+        else:
+            try:
+                data = float(data)
+            except ValueError:
+                pass
+        return data
+
+    def _parse_race_no(self, data):
+        return re.sub("R", "", data)
+
+    def _parse_tit(self, data):
+        s = data.split("|")
+        for e in s:
+            pass
+
+    def _parse_meta(self, meta):
+        pass
+
+    def _parse_title(self, title):
+        pass
 
 
 def test_scraper(url):
@@ -173,18 +215,19 @@ def test_racehead(url):
     scraper = ResultScaraper()
     soup = scraper.retrieve_html(url)
     racehead_dict = scraper.extract_racehead(soup)
-    pprint(racehead_dict)
-    racehead_dict = scraper.parse_racehead(racehead_dict)
+    # racehead_dict = scraper.parse_racehead(racehead_dict)
     return racehead_dict
 
 
+def crawl_resutl_sites():
+    pass
+
+
 if __name__ == "__main__":
-    url = "https://keiba.yahoo.co.jp/race/result/1906030211/"
+    url = "https://keiba.yahoo.co.jp/race/result/1906030212/"
+
     # score_dicts = test_scraper(url)
     # pprint(score_dicts)
 
     racehead_dict = test_racehead(url)
     pprint(racehead_dict)
-
-
-
