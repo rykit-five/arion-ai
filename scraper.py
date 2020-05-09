@@ -242,7 +242,7 @@ def crawl_result_sites():
                             continue
 
                         print("[dump] URL: %s ..." % fetch_url)
-                        dump_site_as_json(json_file, result_dict)
+                        dump_dict_as_json(json_file, result_dict)
                         time.sleep(1)
     print("[crawl] all done")
 
@@ -273,7 +273,7 @@ def fetch_result_site(scraper, url):
     return result_dict
 
 
-def dump_site_as_json(json_file, data_dict):
+def dump_dict_as_json(json_file, data_dict):
     with open(json_file, "w") as f:
         json.dump(data_dict, f, indent=4)
 
