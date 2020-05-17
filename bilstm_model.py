@@ -1,7 +1,10 @@
 import keras
 from keras.preprocessing import sequence
 from keras.models import Model
-from keras.layers import Input, Embedding, LSTM, Bidirectional, Dense
+from keras.models import save_model, load_model
+from keras.layers import Input, Embedding, LSTM, Dense, Concatenate
+from keras.layers import TimeDistributed, Bidirectional
+from keras.utils import plot_model
 
 import re
 import sys
@@ -13,6 +16,8 @@ import math
 import numpy as np
 from pprint import pprint
 
+from scraper import load_race_data, fetch_predicting_data
+
 
 class BidirectionalLSTMModel:
 
@@ -23,11 +28,26 @@ class BidirectionalLSTMModel:
         self.n_hidden = n_hidden
 
     def build_model(self):
-        input_ = Input(shape=(self.maxlen, self.input_dim), dtype='float32')  # todo: maxlen->Noneでいいかも
-        encoder = Bidirectional(LSTM(self.n_hidden, return_sequences=True))(input_)
-        output_ = Dense(self.output_dim, activation='softmax')(encoder)
+        # Encoder
+        # enc_input = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='encoder_input')  # todo: maxlen->Noneでいいかも
+        # enc_bilstm, [state_h, state_c] = Bidirectional(LSTM(self.n_hidden, name='encoder_bilstm', return_sequences=True))(enc_input)
+        # enc_state = [state_h, state_c]
+        # enc_model = Model(input_shape=enc_input, outputs=[enc_bilstm, state_h, state_c])
 
-        model = Model(inputs=input_, outputs=output_)
+        # Decoder
+        # dec_lstm = LSTM(self.n_hidden, name='decoder_lstm', return_state=True)()
+        # dec_dense = Dense(self.output_dim, activation='softmax', name='decoder_dense')
+
+        inputs = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='inputs')
+        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
+                                                    input_shape=(self.maxlen, self.input_dim))(inputs)
+        # state_h = Concatenate()([f_h, b_h])
+        # state_c = Concatenate()([f_c, b_c])
+        # bilstm = Bidirectional(LSTM(self.n_hidden, activation='tanh', name='bilstm2'))(state_h)
+        dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
+                                input_shape=(self.maxlen, self.n_hidden))(bilstm)
+
+        model = Model(inputs=inputs, outputs=dense)
         model.compile(loss='categorical_crossentropy',
                       optimizer='Adam',
                       metrics=['categorical_accuracy'])
@@ -116,149 +136,103 @@ class BidirectionalLSTMModel:
         pass
 
 
-def load_json_as_dict(json_file):
-    with open(json_file, "r") as f:
-        data_dict = json.load(f)
-    return data_dict
+# def arrival_order_to_one_hot(arrival_order, maxlen):
+    # one_hot = np.identity(maxlen)arrival_order
+    # one_hot = np.zeros((maxlen, maxlen))
+    # for i in arrival_order:
+    #     one_hot[i][i] = 1.0
+    # return one_hot
 
 
-def flatten_dict(data_dict):
-    flattened_dict = {}
-    for k, v in data_dict.items():
-        if isinstance(v, dict):
-            for k_, v_ in v.items():
-                flattened_dict[k_] = v_
-        else:
-            flattened_dict[k] = v
-    return flattened_dict
+def load(maxlen):
+    list_score_and_racehead, list_arrival_order = load_race_data()
+    # labels = arrival_order_to_one_hot(list_arrival_order, 18)
+    list_label = []
+    for arrival_order in list_arrival_order:
+        try:
+            label = np.eye(maxlen)[arrival_order]
+        except IndexError as e:
+            print(e)
+        if label.shape[0] < maxlen:
+            for i in range(maxlen - label.shape[0]):
+                zero_label = np.zeros(maxlen)
+                label = np.vstack((label, zero_label))
+        list_label.append(label)
+
+    train_x = np.array(list_score_and_racehead)
+    train_y = np.array(list_label)
+
+    print(train_x.shape)
+    print(train_y.shape)
+
+    return train_x, train_y
+
+def train(train_x, train_y, maxlen, model_name):
+    # Hyper parameters
+    input_dim = 17
+    output_dim = 18
+    n_hidden = 256
+    epochs = 100
+    batch_size = 32
+
+    BLM = BidirectionalLSTMModel(maxlen=maxlen,
+                                 input_dim=input_dim,
+                                 output_dim=output_dim,
+                                 n_hidden=n_hidden)
+    model = BLM.build_model()
+    model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1)
+
+    plot_model(model, show_shapes=True, to_file='{}.png'.format(model_name))
+    save_model('{}.h5'.format(model_name))
+
+    return model
 
 
-def load_race_data():
-    score_race_lists = []
+def predict(model_name, input_dim):
+    model = load_model('{}.h5'.format(model_name))
+    url = 'https://keiba.yahoo.co.jp/race/result/2005020811/'
 
-    current_dir = Path.cwd()
-    results_fir = current_dir / 'results'
-    json_files = results_fir.glob('2003*.json')
+    score_and_racehead = fetch_predicting_data(url)
 
-    effective_score_labels = [
-        "arrival_order",
-        "frame_no",
-        "horse_no",
-        # "horse_name",
-        "horse_sex",
-        "horse_age",
-        "horse_weight",
-        "horse_weight_diff",
-        # "horse_b",
-        # "arrival_diff",
-        "time",
-        "last3f_time",
-        "passing_order_1st",
-        "passing_order_2nd",
-        "passing_order_3rd",
-        "passing_order_4th",
-        # "jockey_name",
-        "jockey_weight",
-        "odds",
-        "popularity",
-        # "trainer_name",
-    ]
+    # popularity
+    odds = []
+    for sr in score_and_racehead:
+        odds.append(sr[9])
+    popurarities = np.array(odds).argsort()
+    popurs = []
+    for i in range(maxlen):
+        if i >= popurarities.shape[0]:
+            break
+        #     popurarities = np.append(popurarities, 0)
+        # else:
+        popurs.append([popurarities[i] + 1])
+    popurs = np.array([popurs])
 
-    effective_racehead_labels = [
-        "race_no",
-        # "date",
-        "week",
-        "kai",
-        # "lacation",
-        "nichi",
-        "start_time",
-        "weather",
-        "condition",
-    ]
+    test_x = np.array([score_and_racehead])
+    test_x = np.insert(test_x, [10], popurs, axis=2)
 
-    # jsonファイルを全読み込み
-    for json_file in json_files:
-        data_dict = load_json_as_dict(json_file)
+    if test_x.shape[0] < maxlen:
+        for i in range(maxlen - test_x.shape[1]):
+            zero_label = np.array([[[0] * input_dim]])  # input_dim = 17
+            test_x = np.append(test_x, zero_label, axis=1)
 
-        # ネスト化された辞書を平坦化
-        score_dicts = []
-        racehead_dict = {}
-        for k, v in data_dict.items():
-            if k == 'scores':
-                for s in v:
-                    flattened_dict = flatten_dict(s)
-                    score_dict = {k_: v_ for k_, v_ in flattened_dict.items() if k_ in effective_score_labels}
-                    score_dicts.append(score_dict)
-            elif k == 'recehead':
-                flattened_dict = flatten_dict(v)
-                racehead_dict = {k_: v_ for k_, v_ in flattened_dict.items() if k_ in effective_racehead_labels}
-
-        # データを整形
-        score_race = []
-        for score_dict in score_dicts:
-            # score
-            for k, v in score_dict.items():
-                if k == 'horse_sex':
-                    if v == '牡':
-                        score_race.append(0)
-                    elif v == '牝':
-                        score_race.append(1)
-                    elif v == 'せん':
-                        score_race.append(2)
-                elif k == 'jockey_weight':
-                    if isinstance(v, str):
-                        data = re.sub(re.compile("[☆△▲★◇]"), "", v)
-                        score_race.append(float(data))
-                    elif isinstance(v, float):
-                        score_race.append(v)
-                else:
-                    score_race.append(v)
-            # racehead
-            for k, v in racehead_dict.items():
-                if k == 'week':
-                    if v == '日':
-                        score_race.append(0)
-                    elif v == '月':
-                        score_race.append(1)
-                    elif v == '火':
-                        score_race.append(2)
-                    elif v == '水':
-                        score_race.append(3)
-                    elif v == '木':
-                        score_race.append(4)
-                    elif v == '金':
-                        score_race.append(5)
-                    elif v == '土':
-                        score_race.append(6)
-                elif k == 'start_time':
-                    base_time = datetime.strptime("00:00", "%H:%M")
-                    time = datetime.strptime(v, "%H:%M")
-                    min = abs(time - base_time).total_seconds / 60.0
-                    score_race.append(min)
-                elif k == 'weather':
-                    if v == '晴':
-                        score_race.append(0)
-                    elif v == '曇':
-                        score_race.append(1)
-                    elif v == '雨':
-                        score_race.append(2)
-                    elif v == '雪':
-                        score_race.append(3)
-                elif k == 'condition':
-                    if v == '良':
-                        score_race.append(0)
-                    elif v == '稍重':
-                        score_race.append(1)
-                    elif v == '重':
-                        score_race.append(2)
-                    elif v == '不良':
-                        score_race.append(3)
-                else:
-                    score_race.append(v)
-        score_race_lists.append(score_race)
-        pprint(score_race)
-    return score_race_lists
+    y = model.predict(test_x, batch_size=1, verbose=0, steps=None)
+    return y
 
 
 if __name__ == '__main__':
-    score_race_lists = load_race_data()
+    maxlen = 18
+
+    # Load
+    train_x, train_y = load(maxlen)
+
+    model_name = 'bilstm_model'
+
+    # Train
+    model = train(train_x, train_y, maxlen, model_name)
+
+    # Infer
+    # y = predict(model_name, input_dim=17)
+    # pprint(y)
+
+
