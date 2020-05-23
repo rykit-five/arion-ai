@@ -144,9 +144,21 @@ class BidirectionalLSTMModel:
     # return one_hot
 
 
-def load(maxlen):
+def load(maxlen, n_feature=17):
     list_score_and_racehead, list_arrival_order = load_race_data()
     # labels = arrival_order_to_one_hot(list_arrival_order, 18)
+
+    list_sr = []
+    for score_and_racehead in list_score_and_racehead:
+        score_and_racehead = np.array(score_and_racehead)
+        if score_and_racehead.shape[0] < maxlen:
+            zero_vecs = np.zeros((1, n_feature))
+            for i in range(maxlen - len(score_and_racehead)):
+                # print(score_and_racehead.shape, zero_vecs.shape)
+                score_and_racehead = np.vstack((score_and_racehead, zero_vecs))
+        list_sr.append(score_and_racehead)
+        print(score_and_racehead.shape)
+
     list_label = []
     for arrival_order in list_arrival_order:
         try:
@@ -159,7 +171,7 @@ def load(maxlen):
                 label = np.vstack((label, zero_label))
         list_label.append(label)
 
-    train_x = np.array(list_score_and_racehead)
+    train_x = np.array(list_sr)
     train_y = np.array(list_label)
 
     print(train_x.shape)
@@ -183,7 +195,7 @@ def train(train_x, train_y, maxlen, model_name):
     model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1)
 
     plot_model(model, show_shapes=True, to_file='{}.png'.format(model_name))
-    save_model('{}.h5'.format(model_name))
+    save_model(model, '{}.h5'.format(model_name))
 
     return model
 
@@ -195,21 +207,21 @@ def predict(model_name, input_dim):
     score_and_racehead = fetch_predicting_data(url)
 
     # popularity
-    odds = []
-    for sr in score_and_racehead:
-        odds.append(sr[9])
-    popurarities = np.array(odds).argsort()
-    popurs = []
-    for i in range(maxlen):
-        if i >= popurarities.shape[0]:
-            break
-        #     popurarities = np.append(popurarities, 0)
-        # else:
-        popurs.append([popurarities[i] + 1])
-    popurs = np.array([popurs])
+    # odds = []
+    # for sr in score_and_racehead:
+    #     odds.append(sr[9])
+    # popurarities = np.array(odds).argsort()
+    # popurs = []
+    # for i in range(maxlen):
+    #     if i >= popurarities.shape[0]:
+    #         break
+    #     #     popurarities = np.append(popurarities, 0)
+    #     # else:
+    #     popurs.append([popurarities[i] + 1])
+    # popurs = np.array([popurs])
 
     test_x = np.array([score_and_racehead])
-    test_x = np.insert(test_x, [10], popurs, axis=2)
+    # test_x = np.insert(test_x, [10], popurs, axis=2)
 
     if test_x.shape[0] < maxlen:
         for i in range(maxlen - test_x.shape[1]):
@@ -226,13 +238,16 @@ if __name__ == '__main__':
     # Load
     train_x, train_y = load(maxlen)
 
-    model_name = 'bilstm_model'
+    cur_dir = Path.cwd()
+    model_dir = cur_dir / 'models'
+    model_path = model_dir / 'bilstm_model'
+
 
     # Train
-    model = train(train_x, train_y, maxlen, model_name)
+    # model = train(train_x, train_y, maxlen, model_path)
 
     # Infer
-    # y = predict(model_name, input_dim=17)
-    # pprint(y)
+    y = predict(model_path, input_dim=17)
+    pprint(y)
 
 
