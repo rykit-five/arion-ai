@@ -396,6 +396,10 @@ def load_race_data():
         score_and_racehead, arrival_orders = parse_loaded_data(data_dict)
         list_score_and_racehead.append(score_and_racehead)
         list_arrival_order.append(arrival_orders)
+        # todo: delete
+        print("{}: {}".format(json_file, str(len(score_and_racehead))), end="")
+        for sr in score_and_racehead:
+            print(len(sr))
 
     # pprint(list_score_and_racehead)
     # pprint(list_arrival_order)
