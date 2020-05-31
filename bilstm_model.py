@@ -5,6 +5,11 @@ from keras.models import save_model, load_model
 from keras.layers import Input, Embedding, LSTM, Dense, Concatenate
 from keras.layers import TimeDistributed, Bidirectional
 from keras.utils import plot_model
+from keras import backend as K
+import tensorflow as tf
+from tensorflow.python import debug as tf_debug
+from tensorflow.python.debug.lib.debug_data import has_inf_or_nan
+from tensorflow.keras.backend import eval
 
 import re
 import sys
@@ -15,6 +20,9 @@ from datetime import datetime, timedelta
 import math
 import numpy as np
 from pprint import pprint
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from scraper import load_race_data, fetch_predicting_data
 
@@ -52,6 +60,9 @@ class BidirectionalLSTMModel:
                       optimizer='Adam',
                       metrics=['categorical_accuracy'])
         return model
+
+    def multi_crossentropy(self, y_true, y_pred):
+        return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_true, y_pred))
 
     def train(self, x_input, y_input, batch_size, epochs):
         print("[bilstm] build ...")
@@ -171,11 +182,22 @@ def load(maxlen, n_feature=17):
                 label = np.vstack((label, zero_label))
         list_label.append(label)
 
-    train_x = np.array(list_sr)
-    train_y = np.array(list_label)
+    train_x = np.array(list_sr, dtype=np.float32)
+    train_y = np.array(list_label, dtype=np.float32)
 
     print(train_x.shape)
     print(train_y.shape)
+
+    for i in range(train_x.shape[0]):
+        for j in range(train_x.shape[1]):
+            for k in range(train_x.shape[2]):
+                if np.isnan(train_x[i,j,k]):
+                    print(i, j, train_x[i,j])
+                if np.isinf(train_x[i,j,k]):
+                    print(i, j, train_x[i, j])
+                # print(np.isinf(train_x[i,j]))
+            # print(train_x[i,j])
+    print(np.isinf(train_y))
 
     return train_x, train_y
 
@@ -183,9 +205,12 @@ def train(train_x, train_y, maxlen, model_name):
     # Hyper parameters
     input_dim = 17
     output_dim = 18
-    n_hidden = 256
+    n_hidden = 32
     epochs = 100
-    batch_size = 32
+    batch_size = 16
+
+    print("train_x", train_x.shape)
+    print("train_y", train_y.shape)
 
     BLM = BidirectionalLSTMModel(maxlen=maxlen,
                                  input_dim=input_dim,
@@ -232,7 +257,22 @@ def predict(model_name, input_dim):
     return y
 
 
+# FIXME: TF2.0以上ではsessionがないため使えない
+def set_debugger_session():
+    sess = K.get_session()
+    sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+    sess.add_tensor_filter('has_inf_or_nan', has_inf_or_nan)
+    K.set_session(sess)
+
+
 if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '--debug':
+            set_debugger_session()
+        else:
+            # raise ValueError('unknown option {}'.format(sys.argv[1]))
+            pass
+
     maxlen = 18
 
     # Load
@@ -248,6 +288,25 @@ if __name__ == '__main__':
 
     # Infer
     y = predict(model_path, input_dim=17)
-    pprint(y)
+    print(y.shape)
+    np.set_printoptions(suppress=True, precision=5)
+    print(y)
+
+    plt.style.use('default')
+    sns.set()
+    sns.set_style('whitegrid')
+    sns.set_palette('gray')
+
+    label = np.arange(1, maxlen+1)
+    fig = plt.figure(figsize=(16.0, 9.0))
+
+    for i in range(maxlen):
+        d1 = np.array(y[0, i, :])
+        ax1 = fig.add_subplot(maxlen, 1, i+1)
+        ax1.bar(label, d1)
+
+    fig.tight_layout()
+    plt.savefig('result.png')
+    # plt.show()
 
 
