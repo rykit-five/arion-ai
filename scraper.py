@@ -333,10 +333,12 @@ def parse_weather(data):
         return 0
     elif data == '曇':
         return 1
-    elif data == '雨':
+    elif data == '小雨':
         return 2
-    elif data == '雪':
+    elif data == '雨':
         return 3
+    elif data == '雪':
+        return 4
 
 
 def parse_condition(data):
@@ -468,6 +470,9 @@ def parse_loaded_data(data_dict):
         #     racehead.append(parse_start_time(v))
         elif k == 'weather':
             racehead.append(parse_weather(v))
+            if parse_weather(v) is None:
+                print(v)
+                raise
         elif k == 'condition':
             racehead.append(parse_condition(v))
         else:
