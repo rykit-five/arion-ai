@@ -2,7 +2,7 @@ import keras
 from keras.preprocessing import sequence
 from keras.models import Model
 from keras.models import save_model, load_model
-from keras.layers import Input, Embedding, LSTM, Dense, Concatenate
+from keras.layers import Input, Embedding, LSTM, Dense, Concatenate, SimpleRNN
 from keras.layers import TimeDistributed, Bidirectional
 from keras.utils import plot_model
 from keras import backend as K
@@ -47,13 +47,22 @@ class BidirectionalLSTMModel:
         # dec_dense = Dense(self.output_dim, activation='softmax', name='decoder_dense')
 
         inputs = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='inputs')
-        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
-                                                    input_shape=(self.maxlen, self.input_dim))(inputs)
+        # bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
+        #                                             input_shape=(self.maxlen, self.input_dim))(inputs)
+
+        # rnn1 = Bidirectional(SimpleRNN(self.n_hidden, return_sequences=True, activation='relu', name='rnn1'),
+        #                      input_shape=(self.maxlen, self.input_dim))(inputs)
+        rnn1 = SimpleRNN(self.n_hidden, return_sequences=True, activation='relu', name='rnn1')(inputs)
+        rnn2 = SimpleRNN(self.n_hidden, return_sequences=True, activation='relu', name='rnn2')(rnn1)
+        rnn3 = SimpleRNN(self.n_hidden, return_sequences=True, activation='relu', name='rnn3')(rnn2)
+
         # state_h = Concatenate()([f_h, b_h])
         # state_c = Concatenate()([f_c, b_c])
         # bilstm = Bidirectional(LSTM(self.n_hidden, activation='tanh', name='bilstm2'))(state_h)
-        dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
-                                input_shape=(self.maxlen, self.n_hidden))(bilstm)
+        # dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
+        #                         input_shape=(self.maxlen, self.n_hidden))(rnn1)
+        dense = Dense(self.output_dim, activation='softmax', name='dense')(rnn3)
+
 
         model = Model(inputs=inputs, outputs=dense)
         model.compile(loss='categorical_crossentropy',
@@ -280,33 +289,33 @@ if __name__ == '__main__':
 
     cur_dir = Path.cwd()
     model_dir = cur_dir / 'models'
-    model_path = model_dir / 'bilstm_model'
+    model_path = model_dir / 'rnn_model'
 
 
     # Train
-    # model = train(train_x, train_y, maxlen, model_path)
+    model = train(train_x, train_y, maxlen, model_path)
 
-    # Infer
-    y = predict(model_path, input_dim=17)
-    print(y.shape)
-    np.set_printoptions(suppress=True, precision=5)
-    print(y)
-
-    plt.style.use('default')
-    sns.set()
-    sns.set_style('whitegrid')
-    sns.set_palette('gray')
-
-    label = np.arange(1, maxlen+1)
-    fig = plt.figure(figsize=(16.0, 9.0))
-
-    for i in range(maxlen):
-        d1 = np.array(y[0, i, :])
-        ax1 = fig.add_subplot(maxlen, 1, i+1)
-        ax1.bar(label, d1)
-
-    fig.tight_layout()
-    plt.savefig('result.png')
-    # plt.show()
+    # # Infer
+    # y = predict(model_path, input_dim=17)
+    # print(y.shape)
+    # np.set_printoptions(suppress=True, precision=5)
+    # print(y)
+    #
+    # plt.style.use('default')
+    # sns.set()
+    # sns.set_style('whitegrid')
+    # sns.set_palette('gray')
+    #
+    # label = np.arange(1, maxlen+1)
+    # fig = plt.figure(figsize=(16.0, 9.0))
+    #
+    # for i in range(maxlen):
+    #     d1 = np.array(y[0, i, :])
+    #     ax1 = fig.add_subplot(maxlen, 1, i+1)
+    #     ax1.bar(label, d1)
+    #
+    # fig.tight_layout()
+    # plt.savefig('result.png')
+    # # plt.show()
 
 
