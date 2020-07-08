@@ -47,7 +47,7 @@ class BidirectionalLSTMModel:
         # dec_dense = Dense(self.output_dim, activation='softmax', name='decoder_dense')
 
         inputs = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='inputs')
-        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
+        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='relu', name='bilstm1'),
                                                     input_shape=(self.maxlen, self.input_dim))(inputs)
         # state_h = Concatenate()([f_h, b_h])
         # state_c = Concatenate()([f_c, b_c])
@@ -167,8 +167,8 @@ def load(maxlen, n_feature=17):
             for i in range(maxlen - len(score_and_racehead)):
                 # print(score_and_racehead.shape, zero_vecs.shape)
                 score_and_racehead = np.vstack((score_and_racehead, zero_vecs))
+        score_and_racehead = np.array(score_and_racehead, dtype=np.float32)
         list_sr.append(score_and_racehead)
-        print(score_and_racehead.shape)
 
     list_label = []
     for arrival_order in list_arrival_order:
@@ -180,7 +180,18 @@ def load(maxlen, n_feature=17):
             for i in range(maxlen - label.shape[0]):
                 zero_label = np.zeros(maxlen)
                 label = np.vstack((label, zero_label))
+        label = np.array(label)
         list_label.append(label)
+
+    assert len(list_sr) == len(list_label)
+
+    # shuffle each race information including max to 18 horses
+    for i in range(len(list_sr)):
+        seed = np.random.randint(1, 100)
+        np.random.seed(seed)
+        np.random.shuffle(list_sr[i])
+        np.random.seed(seed)
+        np.random.shuffle(list_label[i])
 
     train_x = np.array(list_sr, dtype=np.float32)
     train_y = np.array(list_label, dtype=np.float32)
@@ -206,7 +217,7 @@ def train(train_x, train_y, maxlen, model_name):
     input_dim = 17
     output_dim = 18
     n_hidden = 32
-    epochs = 100
+    epochs = 1000
     batch_size = 16
 
     print("train_x", train_x.shape)
@@ -265,6 +276,11 @@ def set_debugger_session():
     K.set_session(sess)
 
 
+def draw_race_result(result_mat):
+    # todo: copy draw code
+    return
+
+
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         if sys.argv[1] == '--debug':
@@ -273,40 +289,43 @@ if __name__ == '__main__':
             # raise ValueError('unknown option {}'.format(sys.argv[1]))
             pass
 
+    is_train = True
     maxlen = 18
-
-    # Load
-    train_x, train_y = load(maxlen)
 
     cur_dir = Path.cwd()
     model_dir = cur_dir / 'models'
     model_path = model_dir / 'bilstm_model'
 
+    if is_train:
+        # Load train dataset
+        train_x, train_y = load(maxlen)
 
-    # Train
-    # model = train(train_x, train_y, maxlen, model_path)
+        # Train
+        model = train(train_x, train_y, maxlen, model_path)
 
-    # Infer
-    y = predict(model_path, input_dim=17)
-    print(y.shape)
-    np.set_printoptions(suppress=True, precision=5)
-    print(y)
+    # else:
+        # Infer
+        y = predict(model_path, input_dim=17)
+        print(y.shape)
+        np.set_printoptions(suppress=True, precision=5)
+        print(y)
 
-    plt.style.use('default')
-    sns.set()
-    sns.set_style('whitegrid')
-    sns.set_palette('gray')
+        # todo: to draw_race_result function
+        plt.style.use('default')
+        sns.set()
+        sns.set_style('whitegrid')
+        sns.set_palette('gray')
 
-    label = np.arange(1, maxlen+1)
-    fig = plt.figure(figsize=(16.0, 9.0))
+        label = np.arange(1, maxlen+1)
+        fig = plt.figure(figsize=(16.0, 9.0))
 
-    for i in range(maxlen):
-        d1 = np.array(y[0, i, :])
-        ax1 = fig.add_subplot(maxlen, 1, i+1)
-        ax1.bar(label, d1)
+        for i in range(maxlen):
+            d1 = np.array(y[0, i, :])
+            ax1 = fig.add_subplot(maxlen, 1, i+1)
+            ax1.bar(label, d1)
 
-    fig.tight_layout()
-    plt.savefig('result.png')
-    # plt.show()
+        fig.tight_layout()
+        plt.savefig('result.png')
+        # plt.show()
 
 
