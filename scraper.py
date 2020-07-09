@@ -388,6 +388,7 @@ def parse_arrival_order(data):
 def load_race_data():
     list_score_and_racehead = []
     list_arrival_order = []
+    list_time = []
 
     current_dir = Path.cwd()
     results_fir = current_dir / 'results'
@@ -396,9 +397,10 @@ def load_race_data():
     # jsonファイルを全読み込み
     for json_file in json_files:
         data_dict = load_json_as_dict(json_file)
-        score_and_racehead, arrival_orders = parse_loaded_data(data_dict)
+        score_and_racehead, arrival_orders, times = parse_loaded_data(data_dict)
         list_score_and_racehead.append(score_and_racehead)
         list_arrival_order.append(arrival_orders)
+        list_time.append(times)
         # todo: delete
         print("{}: {}".format(json_file, str(len(score_and_racehead))), end="")
         for sr in score_and_racehead:
@@ -406,7 +408,18 @@ def load_race_data():
 
     # pprint(list_score_and_racehead)
     # pprint(list_arrival_order)
-    return list_score_and_racehead, list_arrival_order
+    return list_score_and_racehead, list_arrival_order, list_time
+
+
+# def load_time():
+#     list_time = []
+#
+#     current_dir = Path.cwd()
+#     results_fir = current_dir / 'results'
+#     json_files = results_fir.glob('*.json')
+#
+#
+#     return list_time
 
 
 def parse_loaded_data(data_dict):
@@ -422,7 +435,7 @@ def parse_loaded_data(data_dict):
         # "horse_b",
         # "arrival_diff",
         "time",
-        "last3f_time",
+        # "last3f_time",
         # "passing_order_1st",
         # "passing_order_2nd",
         # "passing_order_3rd",
@@ -455,6 +468,7 @@ def parse_loaded_data(data_dict):
                 flattened_dict = flatten_dict(s)
                 score_dict = {k_: v_ for k_, v_ in flattened_dict.items() if k_ in effective_score_labels}
                 score_dicts.append(score_dict)
+            score_dicts.sort(key=lambda x: x['horse_no'])
         elif k == 'racehead':
             flattened_dict = flatten_dict(v)
             racehead_dict = {k_: v_ for k_, v_ in flattened_dict.items() if k_ in effective_racehead_labels}
@@ -480,12 +494,15 @@ def parse_loaded_data(data_dict):
             racehead.append(v)
 
     arrival_orders = []
+    times = []
     for score_dict in score_dicts:
         # score
         score = []
         for k, v in score_dict.items():
             if k == 'arrival_order':
                 arrival_orders.append(parse_arrival_order(v))
+            elif k == 'time':
+                times.append(v)
             elif k == 'horse_sex':
                 score.append(parse_horse_sex(v))
             elif k == 'horse_weight_diff':
@@ -495,14 +512,14 @@ def parse_loaded_data(data_dict):
             else:
                 score.append(v)
         score_and_racehead.append(score + racehead)
-    return score_and_racehead, arrival_orders
+    return score_and_racehead, arrival_orders, times
 
 
 def fetch_predicting_data(url):
     scaraper = ResultScaraper()
     result_dict = fetch_result_site(scaraper, url)
 
-    score_and_racehead, _ = parse_loaded_data(result_dict)
+    score_and_racehead, _, _ = parse_loaded_data(result_dict)
     return score_and_racehead
 
 

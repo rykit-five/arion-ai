@@ -2,7 +2,7 @@ import keras
 from keras.preprocessing import sequence
 from keras.models import Model
 from keras.models import save_model, load_model
-from keras.layers import Input, Embedding, LSTM, Dense, Concatenate
+from keras.layers import Input, Embedding, LSTM, Dense, Concatenate, Masking
 from keras.layers import TimeDistributed, Bidirectional
 from keras.utils import plot_model
 from keras import backend as K
@@ -10,6 +10,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from tensorflow.python.debug.lib.debug_data import has_inf_or_nan
 from tensorflow.keras.backend import eval
+from sklearn.model_selection import train_test_split
 
 import re
 import sys
@@ -27,10 +28,10 @@ import seaborn as sns
 from scraper import load_race_data, fetch_predicting_data
 
 # Hyper parameters
-input_dim = 17
+input_dim = 15
 output_dim = 18
 n_hidden = 1024
-epochs = 100
+epochs = 10000
 batch_size = 32
 maxlen = 18
 
@@ -56,22 +57,27 @@ class BidirectionalLSTMModel:
         # dec_dense = Dense(self.output_dim, activation='softmax', name='decoder_dense')
 
         inputs = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='inputs')
-        bilstm1 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
-                                                    input_shape=(self.maxlen, self.input_dim))(inputs)
-        bilstm2 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
-                               input_shape=(self.maxlen, self.input_dim))(bilstm1)
-        bilstm3 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
-                               input_shape=(self.maxlen, self.input_dim))(bilstm2)
+        mask = Masking(mask_value=-1.0, input_shape=(self.maxlen, self.input_dim))(inputs)
+        bilstm1 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='relu', name='bilstm1'),
+                                                    input_shape=(self.maxlen, self.input_dim))(mask)
+        # bilstm2 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='relu', name='bilstm2'),
+        #                        input_shape=(self.maxlen, self.input_dim))(bilstm1)
+        # bilstm3 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='relu', name='bilstm3'),
+        #                        input_shape=(self.maxlen, self.input_dim))(bilstm2)
         # state_h = Concatenate()([f_h, b_h])
         # state_c = Concatenate()([f_c, b_c])
         # bilstm = Bidirectional(LSTM(self.n_hidden, activation='tanh', name='bilstm2'))(state_h)
-        dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
-                                input_shape=(self.maxlen, self.n_hidden))(bilstm3)
+        o_dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='o_dense'),
+                                  input_shape=(self.maxlen, self.n_hidden))(bilstm1)
+        t_dense = TimeDistributed(Dense(1, activation='linear', name='t_dense'),
+                                input_shape=(self.maxlen, self.n_hidden))(bilstm1)
 
-        model = Model(inputs=inputs, outputs=dense)
+        model = Model(inputs=inputs, outputs=[o_dense, t_dense])
 
-        adam = tf.keras.optimizers.Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.1, amsgrad=False)
-        model.compile(loss='categorical_crossentropy',
+        sgd = keras.optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+        adam = tf.keras.optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        model.compile(loss=(['categorical_crossentropy', 'mean_squared_error']),
+                      loss_weights=([0.7, 0.3]),
                       optimizer=adam,
                       metrics=['accuracy'])
         return model
@@ -170,15 +176,17 @@ class BidirectionalLSTMModel:
     # return one_hot
 
 
-def load(maxlen, n_feature=17):
-    list_score_and_racehead, list_arrival_order = load_race_data()
+def load():
+    list_score_and_racehead, list_arrival_order, list_time = load_race_data()
     # labels = arrival_order_to_one_hot(list_arrival_order, 18)
 
     list_sr = []
     for score_and_racehead in list_score_and_racehead:
         score_and_racehead = np.array(score_and_racehead)
         if score_and_racehead.shape[0] < maxlen:
-            zero_vecs = np.zeros((1, n_feature))
+            zero_vecs = np.zeros((1, input_dim))
+            zero_vecs -= 1.0
+
             for i in range(maxlen - len(score_and_racehead)):
                 # print(score_and_racehead.shape, zero_vecs.shape)
                 score_and_racehead = np.vstack((score_and_racehead, zero_vecs))
@@ -186,56 +194,77 @@ def load(maxlen, n_feature=17):
         list_sr.append(score_and_racehead)
         print(score_and_racehead.shape)
 
-    list_label = []
+    list_label_o = []
     for arrival_order in list_arrival_order:
         try:
-            label = np.eye(maxlen, dtype=np.float32)[[a-1 for a in arrival_order]]
+            label = np.eye(maxlen, dtype=np.float32)[[a - 1 for a in arrival_order]]
         except IndexError as e:
             raise
+
         if label.shape[0] < maxlen:
             for i in range(maxlen - label.shape[0]):
                 zero_label = np.zeros(maxlen)
+                zero_label -= 1.0
                 label = np.vstack((label, zero_label))
-        list_label.append(label)
+        list_label_o.append(label)
+
+    list_label_t = []
+    for time in list_time:
+        if len(time) < maxlen:
+            for i in range(maxlen - len(time)):
+                time.append(-1.0)
+        time = np.array([[t] for t in time], np.float32)
+        list_label_t.append(time)
 
     # shuffle each race information including max to 18 horses
-    assert len(list_sr) == len(list_label)
-    for i in range(len(list_sr)):
-        seed = np.random.randint(1, 100)
-        np.random.seed(seed)
-        np.random.shuffle(list_sr[i])
-        np.random.seed(seed)
-        np.random.shuffle(list_label[i])
+    assert len(list_sr) == len(list_label_o) == len(list_label_t)
+    # for i in range(len(list_sr)):
+    #     tmp_list = zip(list_sr[i], list_label_o[i], list_label_t[i])
+    #     sorted(tmp_list, key=lambda x: x[1], reverse=True)
+    #     list_sr[i], list_label_o[i], list_label_t[i] = zip(*tmp_list)
+    #
+    #     seed = np.random.randint(1, 100)
+    #     np.random.seed(seed)
+    #     np.random.shuffle(list_sr[i])
+    #     np.random.seed(seed)
+    #     np.random.shuffle(list_label_o[i])
+    #     np.random.seed(seed)
+    #     np.random.shuffle(list_label_t[i])
+
 
     train_x = np.array(list_sr, dtype=np.float32)
-    train_y = np.array(list_label, dtype=np.float32)
+    train_yo = np.array(list_label_o, dtype=np.float32)
+    train_yt = np.array(list_label_t, dtype=np.float32)
 
     print(train_x.shape)
-    print(train_y.shape)
+    print(train_yo.shape)
+    print(train_yt.shape)
 
-    for i in range(train_x.shape[0]):
-        for j in range(train_x.shape[1]):
-            for k in range(train_x.shape[2]):
-                if np.isnan(train_x[i,j,k]):
-                    print(i, j, train_x[i,j])
-                if np.isinf(train_x[i,j,k]):
-                    print(i, j, train_x[i, j])
+    # DEBUG
+    # for i in range(train_x.shape[0]):
+    #     for j in range(train_x.shape[1]):
+    #         for k in range(train_x.shape[2]):
+    #             if np.isnan(train_x[i,j,k]):
+    #                 print(i, j, train_x[i,j])
+    #             if np.isinf(train_x[i,j,k]):
+    #                 print(i, j, train_x[i, j])
                 # print(np.isinf(train_x[i,j]))
             # print(train_x[i,j])
-    print(np.isinf(train_y))
+    # print(np.isinf(train_y))
 
-    return train_x, train_y
+    return train_x, train_yo, train_yt
 
-def train(train_x, train_y, maxlen, model_name):
+def train(train_x, train_yo, train_yt, model_name=''):
     print("train_x", train_x.shape)
-    print("train_y", train_y.shape)
+    print("train_yo", train_yo.shape)
+    print("train_yt", train_yt.shape)
 
     BLM = BidirectionalLSTMModel(maxlen=maxlen,
                                  input_dim=input_dim,
                                  output_dim=output_dim,
                                  n_hidden=n_hidden)
     model = BLM.build_model()
-    result = model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1)
+    result = model.fit(train_x, [train_yo, train_yt], batch_size=batch_size, epochs=epochs, verbose=1)
 
     plot_model(model, show_shapes=True, to_file='{}.png'.format(model_name))
     save_model(model, '{}.h5'.format(model_name))
@@ -243,7 +272,7 @@ def train(train_x, train_y, maxlen, model_name):
     return model, result
 
 
-def predict(model_name, input_dim):
+def predict(model_name):
     model = load_model('{}.h5'.format(model_name))
     url = 'https://keiba.yahoo.co.jp/race/result/2005020811/'
 
@@ -268,11 +297,11 @@ def predict(model_name, input_dim):
 
     if test_x.shape[0] < maxlen:
         for i in range(maxlen - test_x.shape[1]):
-            zero_label = np.array([[[0] * input_dim]])  # input_dim = 17
+            zero_label = np.array([[[0] * input_dim]])
             test_x = np.append(test_x, zero_label, axis=1)
 
-    y = model.predict(test_x, batch_size=1, verbose=0, steps=None)
-    return y
+    yo, yt = model.predict(test_x, batch_size=1, verbose=0, steps=None)
+    return yo, yt
 
 
 # FIXME: TF2.0以上ではsessionがないため使えない
@@ -292,7 +321,7 @@ if __name__ == '__main__':
             pass
 
     # Load
-    train_x, train_y = load(maxlen)
+    train_x, train_yo, train_yt = load()
 
     cur_dir = Path.cwd()
     model_dir = cur_dir / 'models'
@@ -300,9 +329,13 @@ if __name__ == '__main__':
 
     if is_train:
         # Train
-        model, result = train(train_x, train_y, maxlen, model_path)
+        model, result = train(train_x, train_yo, train_yt, model_path)
 
-        plt.plot(range(1, epochs + 1), result.history['accuracy'], label="training")
+        print(model.metrics_names)
+        print(result.history.keys())  # ヒストリデータのラベルを見てみる
+
+        plt.plot(range(1, epochs + 1), result.history['time_distributed_1_accuracy'], label="training_order")
+        plt.plot(range(1, epochs + 1), result.history['time_distributed_2_accuracy'], label="training_time")
         # plt.plot(range(1, epochs + 1), result.history['val_acc'], label="validation")
         plt.xlabel('Epochs')
         plt.ylabel('Accuracy')
@@ -312,10 +345,12 @@ if __name__ == '__main__':
 
     # else:
         # Infer
-        y = predict(model_path, input_dim=17)
-        print(y.shape)
+        yo, yt = predict(model_path)
+        print(yo.shape)
+        print(yt.shape)
         np.set_printoptions(suppress=True, precision=5)
-        print(y)
+        print(yo)
+        print(yt)
 
         plt.style.use('default')
         sns.set()
@@ -326,7 +361,7 @@ if __name__ == '__main__':
         fig = plt.figure(figsize=(16.0, 9.0))
 
         for i in range(maxlen):
-            d1 = np.array(y[0, i, :])
+            d1 = np.array(yo[0, i, :])
             ax1 = fig.add_subplot(maxlen, 1, i+1)
             ax1.bar(label, d1)
 
