@@ -26,6 +26,15 @@ import seaborn as sns
 
 from scraper import load_race_data, fetch_predicting_data
 
+# Hyper parameters
+input_dim = 17
+output_dim = 18
+n_hidden = 1024
+epochs = 1000
+batch_size = 32
+maxlen = 18
+is_train = False
+
 
 class BidirectionalLSTMModel:
 
@@ -47,18 +56,23 @@ class BidirectionalLSTMModel:
         # dec_dense = Dense(self.output_dim, activation='softmax', name='decoder_dense')
 
         inputs = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='inputs')
-        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='relu', name='bilstm1'),
+        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=False, activation='relu', name='bilstm1'),
                                                     input_shape=(self.maxlen, self.input_dim))(inputs)
         # state_h = Concatenate()([f_h, b_h])
         # state_c = Concatenate()([f_c, b_c])
         # bilstm = Bidirectional(LSTM(self.n_hidden, activation='tanh', name='bilstm2'))(state_h)
-        dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
-                                input_shape=(self.maxlen, self.n_hidden))(bilstm)
+        # dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
+        #                         input_shape=(self.maxlen, self.n_hidden))(bilstm)
+        dense = Dense(self.output_dim, activation='softmax', name='dense')(bilstm)
 
         model = Model(inputs=inputs, outputs=dense)
+        adam = tf.keras.optimizers.Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=False)
+        adagrad = tf.keras.optimizers.Adagrad(lr=0.01, epsilon=1e-06)
+        sgd = keras.optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+
         model.compile(loss='categorical_crossentropy',
-                      optimizer='Adam',
-                      metrics=['categorical_accuracy'])
+                      optimizer=adam,
+                      metrics=['accuracy'])
         return model
 
     def multi_crossentropy(self, y_true, y_pred):
@@ -172,18 +186,29 @@ def load(maxlen, n_feature=17):
 
     list_label = []
     for arrival_order in list_arrival_order:
-        try:
-            label = np.eye(maxlen)[arrival_order]
-        except IndexError as e:
-            print(e)
-        if label.shape[0] < maxlen:
-            for i in range(maxlen - label.shape[0]):
-                zero_label = np.zeros(maxlen)
-                label = np.vstack((label, zero_label))
-        label = np.array(label)
-        list_label.append(label)
+        for i in range(maxlen - len(arrival_order)):
+            arrival_order.append(0)
 
-    assert len(list_sr) == len(list_label)
+        for i in range(len(arrival_order)):
+            try:
+                if isinstance(arrival_order[i], str):
+                    print(arrival_order[i])
+                arrival_order[i] = 1.0 / arrival_order[i]
+            except ZeroDivisionError:
+                pass
+
+        arrival_order = np.array(arrival_order, dtype=np.float32)
+        arrival_order /= arrival_order.sum(axis=0)
+
+        # try:
+        #     label = np.eye(maxlen)[arrival_order]
+        # except IndexError as e:
+        #     print(e)
+        # if label.shape[0] < maxlen:
+        #     for i in range(maxlen - label.shape[0]):
+        #         zero_label = np.zeros(maxlen)
+        #         label = np.vstack((label, zero_label))
+        list_label.append(arrival_order)
 
     # shuffle each race information including max to 18 horses
     for i in range(len(list_sr)):
@@ -213,27 +238,35 @@ def load(maxlen, n_feature=17):
     return train_x, train_y
 
 def train(train_x, train_y, maxlen, model_name):
-    # Hyper parameters
-    input_dim = 17
-    output_dim = 18
-    n_hidden = 32
-    epochs = 1000
-    batch_size = 16
-
     print("train_x", train_x.shape)
     print("train_y", train_y.shape)
+
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss',
+        min_delta=0.0,
+        patience=10,
+    )
+
+    # val_lossの改善が2エポック見られなかったら、学習率を0.5倍する。
+    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.5,
+        patience=2,
+        min_lr=0.0001
+    )
 
     BLM = BidirectionalLSTMModel(maxlen=maxlen,
                                  input_dim=input_dim,
                                  output_dim=output_dim,
                                  n_hidden=n_hidden)
     model = BLM.build_model()
-    model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1)
+    result = model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1,
+                       callbacks=[])
 
     plot_model(model, show_shapes=True, to_file='{}.png'.format(model_name))
     save_model(model, '{}.h5'.format(model_name))
 
-    return model
+    return model, result
 
 
 def predict(model_name, input_dim):
@@ -289,9 +322,6 @@ if __name__ == '__main__':
             # raise ValueError('unknown option {}'.format(sys.argv[1]))
             pass
 
-    is_train = True
-    maxlen = 18
-
     cur_dir = Path.cwd()
     model_dir = cur_dir / 'models'
     model_path = model_dir / 'bilstm_model'
@@ -301,30 +331,46 @@ if __name__ == '__main__':
         train_x, train_y = load(maxlen)
 
         # Train
-        model = train(train_x, train_y, maxlen, model_path)
+        model, result = train(train_x, train_y, maxlen, model_path)
 
-    # else:
+        print(model.metrics_names)
+        print(result.history.keys())  # ヒストリデータのラベルを見てみる
+
+        plt.plot(range(1, epochs + 1), result.history['accuracy'], label="training")
+        # plt.plot(range(1, epochs + 1), result.history['val_acc'], label="validation")
+        plt.xlabel('Epochs')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        # plt.show()
+        plt.savefig('accuracy.png')
+
+    else:
         # Infer
-        y = predict(model_path, input_dim=17)
+        y = predict(model_path, input_dim=input_dim)
         print(y.shape)
-        np.set_printoptions(suppress=True, precision=5)
+        np.set_printoptions(suppress=True, precision=10)
         print(y)
 
         # todo: to draw_race_result function
-        plt.style.use('default')
-        sns.set()
-        sns.set_style('whitegrid')
-        sns.set_palette('gray')
+        # plt.style.use('default')
+        # sns.set()
+        # sns.set_style('whitegrid')
+        # sns.set_palette('gray')
+        #
+        # label = np.arange(1, maxlen+1)
+        # fig = plt.figure(figsize=(16.0, 9.0))
+        #
+        # for i in range(1):
+        #     d1 = np.array(y[i, :])
+        #     ax1 = fig.add_subplot(maxlen, 1, i+1)
+        #     ax1.bar(label, d1)
+        #
+        # fig.tight_layout()
+        x = range(0, maxlen)
+        # y = np.reshape((-1, ), y)
+        labels = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"]
+        plt.bar(x, y[0], tick_label=labels)
 
-        label = np.arange(1, maxlen+1)
-        fig = plt.figure(figsize=(16.0, 9.0))
-
-        for i in range(maxlen):
-            d1 = np.array(y[0, i, :])
-            ax1 = fig.add_subplot(maxlen, 1, i+1)
-            ax1.bar(label, d1)
-
-        fig.tight_layout()
         plt.savefig('result.png')
         # plt.show()
 
