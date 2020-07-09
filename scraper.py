@@ -377,10 +377,9 @@ def parse_jockey_weight(data):
 
 
 def parse_arrival_order(data):
-    data = str(data)
-    s = re.search(re.compile(r"(\d+)(\(\d+\))*"), data)
+    s = re.search(re.compile('(\d{1,2})\(\d{1,2}\)'))
     if s:
-        return float(s.group(1))
+        return float(s.group(0))
     else:
         return data
 
@@ -391,7 +390,7 @@ def load_race_data():
 
     current_dir = Path.cwd()
     results_fir = current_dir / 'results'
-    json_files = results_fir.glob('*.json')
+    json_files = results_fir.glob('200301*.json')
 
     # jsonファイルを全読み込み
     for json_file in json_files:
@@ -485,7 +484,7 @@ def parse_loaded_data(data_dict):
         score = []
         for k, v in score_dict.items():
             if k == 'arrival_order':
-                arrival_orders.append(parse_arrival_order(v))
+                arrival_orders.append(v)
             elif k == 'horse_sex':
                 score.append(parse_horse_sex(v))
             elif k == 'horse_weight_diff':
