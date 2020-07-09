@@ -26,6 +26,15 @@ import seaborn as sns
 
 from scraper import load_race_data, fetch_predicting_data
 
+# Hyper parameters
+input_dim = 17
+output_dim = 18
+n_hidden = 1024
+epochs = 100
+batch_size = 32
+maxlen = 18
+
+is_train = True
 
 class BidirectionalLSTMModel:
 
@@ -47,18 +56,24 @@ class BidirectionalLSTMModel:
         # dec_dense = Dense(self.output_dim, activation='softmax', name='decoder_dense')
 
         inputs = Input(shape=(self.maxlen, self.input_dim), dtype='float32', name='inputs')
-        bilstm = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
+        bilstm1 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
                                                     input_shape=(self.maxlen, self.input_dim))(inputs)
+        bilstm2 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
+                               input_shape=(self.maxlen, self.input_dim))(bilstm1)
+        bilstm3 = Bidirectional(LSTM(self.n_hidden, return_sequences=True, activation='tanh', name='bilstm1'),
+                               input_shape=(self.maxlen, self.input_dim))(bilstm2)
         # state_h = Concatenate()([f_h, b_h])
         # state_c = Concatenate()([f_c, b_c])
         # bilstm = Bidirectional(LSTM(self.n_hidden, activation='tanh', name='bilstm2'))(state_h)
         dense = TimeDistributed(Dense(self.output_dim, activation='softmax', name='dense'),
-                                input_shape=(self.maxlen, self.n_hidden))(bilstm)
+                                input_shape=(self.maxlen, self.n_hidden))(bilstm3)
 
         model = Model(inputs=inputs, outputs=dense)
+
+        adam = tf.keras.optimizers.Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.1, amsgrad=False)
         model.compile(loss='categorical_crossentropy',
-                      optimizer='Adam',
-                      metrics=['categorical_accuracy'])
+                      optimizer=adam,
+                      metrics=['accuracy'])
         return model
 
     def multi_crossentropy(self, y_true, y_pred):
@@ -167,20 +182,30 @@ def load(maxlen, n_feature=17):
             for i in range(maxlen - len(score_and_racehead)):
                 # print(score_and_racehead.shape, zero_vecs.shape)
                 score_and_racehead = np.vstack((score_and_racehead, zero_vecs))
+        score_and_racehead = np.array(score_and_racehead, dtype=np.float32)
         list_sr.append(score_and_racehead)
         print(score_and_racehead.shape)
 
     list_label = []
     for arrival_order in list_arrival_order:
         try:
-            label = np.eye(maxlen)[arrival_order]
+            label = np.eye(maxlen, dtype=np.float32)[[a-1 for a in arrival_order]]
         except IndexError as e:
-            print(e)
+            raise
         if label.shape[0] < maxlen:
             for i in range(maxlen - label.shape[0]):
                 zero_label = np.zeros(maxlen)
                 label = np.vstack((label, zero_label))
         list_label.append(label)
+
+    # shuffle each race information including max to 18 horses
+    assert len(list_sr) == len(list_label)
+    for i in range(len(list_sr)):
+        seed = np.random.randint(1, 100)
+        np.random.seed(seed)
+        np.random.shuffle(list_sr[i])
+        np.random.seed(seed)
+        np.random.shuffle(list_label[i])
 
     train_x = np.array(list_sr, dtype=np.float32)
     train_y = np.array(list_label, dtype=np.float32)
@@ -202,13 +227,6 @@ def load(maxlen, n_feature=17):
     return train_x, train_y
 
 def train(train_x, train_y, maxlen, model_name):
-    # Hyper parameters
-    input_dim = 17
-    output_dim = 18
-    n_hidden = 32
-    epochs = 100
-    batch_size = 16
-
     print("train_x", train_x.shape)
     print("train_y", train_y.shape)
 
@@ -217,12 +235,12 @@ def train(train_x, train_y, maxlen, model_name):
                                  output_dim=output_dim,
                                  n_hidden=n_hidden)
     model = BLM.build_model()
-    model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1)
+    result = model.fit(train_x, train_y, batch_size=batch_size, epochs=epochs, verbose=1)
 
     plot_model(model, show_shapes=True, to_file='{}.png'.format(model_name))
     save_model(model, '{}.h5'.format(model_name))
 
-    return model
+    return model, result
 
 
 def predict(model_name, input_dim):
@@ -273,8 +291,6 @@ if __name__ == '__main__':
             # raise ValueError('unknown option {}'.format(sys.argv[1]))
             pass
 
-    maxlen = 18
-
     # Load
     train_x, train_y = load(maxlen)
 
@@ -282,31 +298,40 @@ if __name__ == '__main__':
     model_dir = cur_dir / 'models'
     model_path = model_dir / 'bilstm_model'
 
+    if is_train:
+        # Train
+        model, result = train(train_x, train_y, maxlen, model_path)
 
-    # Train
-    # model = train(train_x, train_y, maxlen, model_path)
+        plt.plot(range(1, epochs + 1), result.history['accuracy'], label="training")
+        # plt.plot(range(1, epochs + 1), result.history['val_acc'], label="validation")
+        plt.xlabel('Epochs')
+        plt.ylabel('Accuracy')
+        plt.legend()
+        # plt.show()
+        plt.savefig('accuracy.png')
 
-    # Infer
-    y = predict(model_path, input_dim=17)
-    print(y.shape)
-    np.set_printoptions(suppress=True, precision=5)
-    print(y)
+    # else:
+        # Infer
+        y = predict(model_path, input_dim=17)
+        print(y.shape)
+        np.set_printoptions(suppress=True, precision=5)
+        print(y)
 
-    plt.style.use('default')
-    sns.set()
-    sns.set_style('whitegrid')
-    sns.set_palette('gray')
+        plt.style.use('default')
+        sns.set()
+        sns.set_style('whitegrid')
+        sns.set_palette('gray')
 
-    label = np.arange(1, maxlen+1)
-    fig = plt.figure(figsize=(16.0, 9.0))
+        label = np.arange(1, maxlen+1)
+        fig = plt.figure(figsize=(16.0, 9.0))
 
-    for i in range(maxlen):
-        d1 = np.array(y[0, i, :])
-        ax1 = fig.add_subplot(maxlen, 1, i+1)
-        ax1.bar(label, d1)
+        for i in range(maxlen):
+            d1 = np.array(y[0, i, :])
+            ax1 = fig.add_subplot(maxlen, 1, i+1)
+            ax1.bar(label, d1)
 
-    fig.tight_layout()
-    plt.savefig('result.png')
-    # plt.show()
+        fig.tight_layout()
+        plt.savefig('result.png')
+        # plt.show()
 
 
