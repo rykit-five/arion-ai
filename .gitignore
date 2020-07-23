@@ -1,12 +1,19 @@
 # Directory
 dataset/
+models/
 old/
 results/
 venv/
 
 # File
-phantomjs
+__init__.py
+bilstm_model.py
+bilstm_model.h5
+bilstm_model.png
 ghostdriver.log
+phantomjs
+result.png
 table.xlsx
 test.py
-crawler.py
+test_db.sqlite
+todo.md
