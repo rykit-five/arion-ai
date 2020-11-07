@@ -1,4 +1,21 @@
 import json
+from datetime import datetime, timedelta
+
+
+def str_to_digit(data):
+    if not isinstance(data, str) or data == '':
+        raise
+    if data.isdigit():
+        return int(data)
+    else:
+        return float(data)
+
+
+def str_to_sec(data):
+    time = datetime.strptime("00.00.0", "%M.%S.%f")
+    data = datetime.strptime(data, "%M.%S.%f")
+    data = timedelta.total_seconds(data - time)
+    return data
 
 
 def load_json_as_dict(json_file):

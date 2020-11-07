@@ -14,22 +14,42 @@ from pathlib import Path
 from pprint import pprint
 import numpy as np
 
-from utils import load_json_as_dict, flatten_dict
+from crawler import Crawler
+from utils import *
 
 
-class Scraper(object):
+# class Scraper(object):
+#
+#     def __init__(self):
+#         pass
+#
+#     def retrieve_html(self, url):
+#         req = requests.get(url)
+#         req.raise_for_status()
+#         soup = BeautifulSoup(req.content, "html.parser")
+#         return soup
+
+
+class DirectoryHorseScraper():
 
     def __init__(self):
         pass
 
-    def retrieve_html(self, url):
-        req = requests.get(url)
-        req.raise_for_status()
-        soup = BeautifulSoup(req.content, "html.parser")
-        return soup
+
+class DirectoryJockyScraper():
+
+    def __init__(self):
+        pass
 
 
-class ResultScaraper(Scraper):
+class DirectoryTrainerScraper():
+
+    def __init__(self):
+        pass
+
+
+class RaceResultScaraper():
+
     racehead_labels = (
         "race_no",
         "tit",
@@ -62,7 +82,7 @@ class ResultScaraper(Scraper):
         "horse_info",
         "arrival_diff",
         "time",
-        "last3f_time",
+        "last_3f_time",
         "passing_order",
         "jockey_name",
         "jockey_weight",
@@ -87,10 +107,16 @@ class ResultScaraper(Scraper):
     )
 
     def __init__(self):
-        super(ResultScaraper, self).__init__()
+        # super(RaceResultScaraper, self).__init__()
+        pass
 
     def extract_racehead(self, soup):
-        racehead = []
+        """
+        html(soup)からレース情報を抽出
+        :param soup: BeautifulSoup obj: html
+        :return: data_dict: dict
+        """
+        data_list = []
         # <td>タグ
         td_tags = soup.select('div#raceTit td')
         for td_tag in td_tags:
@@ -98,17 +124,18 @@ class ResultScaraper(Scraper):
             p_h1_tags = td_tag.select('p, h1')
             if p_h1_tags:
                 for p_h1_tag in p_h1_tags:
-                    racehead.append(p_h1_tag.get_text().strip("()\t\n\x0b\x0c\r "))
+                    data_list.append(p_h1_tag.get_text().strip("()\t\n\x0b\x0c\r "))
             else:
-                racehead.append(td_tag.get_text().strip("()\t\n\x0b\x0c\r "))
+                data_list.append(td_tag.get_text().strip("()\t\n\x0b\x0c\r "))
             # <img>タグ
             img_tags = td_tag.select("img")
             if img_tags:
                 for img_tag in img_tags:
-                    racehead.append(img_tag['alt'])
-        assert len(self.racehead_labels) == len(racehead)
-        racehead_dict = dict(zip(self.racehead_labels, racehead))
-        return racehead_dict
+                    data_list.append(img_tag['alt'])
+
+        assert len(self.racehead_labels) == len(data_list)
+        data_dict = dict(zip(self.racehead_labels, data_list))
+        return data_dict
 
     def parse_racehead(self, racehead_dict):
         racehead_dict["race_no"] = self._parse_race_no(racehead_dict["race_no"])
@@ -123,46 +150,59 @@ class ResultScaraper(Scraper):
                 racehead_dict[k] = self._str_to_digit(v)
 
     def extract_scores(self, soup):
-        score_dicts = []
+        """
+        html(soup)か各馬の結果情報を抽出
+        :param soup: BeautifulSoup obj: html
+        :return: data_dicts: list of dict
+        """
+        data_dicts = []
         table = soup.select("table#raceScore")[0]
         for tr_tag in table.select("tbody > tr"):
-            score = []
+            data_list = []
             for td_tag in tr_tag.select("td"):
                 # <a>タグ
                 a_tags = td_tag.select("a")
                 if a_tags:
-                    score.append(a_tags[0].get_text().strip("()\t\n\x0b\x0c\r "))
+                    data_list.append(a_tags[0].get_text().strip("()\t\n\x0b\x0c\r "))
                     a_tags[0].extract()
                 # <span>タグ
                 span_tags = td_tag.select("span.scdItem")
                 if span_tags:
-                    score.append(span_tags[0].get_text().strip("()\t\n\x0b\x0c\r "))
+                    data_list.append(span_tags[0].get_text().strip("()\t\n\x0b\x0c\r "))
                     span_tags[0].extract()
                 # 上記以外
                 td_text = td_tag.get_text().strip()
                 if td_text:
-                    score.append(td_text)
+                    data_list.append(td_text)
+            # TODO: parseに移動させたい
             # データを保存
-            if score[0] in ["中止", "除外", "取消"]:
+            if data_list[0] in ["中止", "除外", "取消"]:
                 continue
-            assert len(self.score_labels) == len(score)
-            score_dict = dict(zip(self.score_labels, score))
-            score_dicts.append(score_dict)
-        return score_dicts
 
-    def parse_scores(self, score_dicts):
-        for score_dict in score_dicts:
-            score_dict["time"] = self._to_sec(score_dict["time"])
-            # score_dict["last3f_time"] = self._to_sec(score_dict["last3f_time"])
-            score_dict["horse_info"] = self._parse_horse_info(score_dict["horse_info"])
-            score_dict["passing_order"] = self._parse_passing_order(score_dict["passing_order"])
+            assert len(self.score_labels) == len(data_list)
+            data_dict = dict(zip(self.score_labels, data_list))
+            data_dicts.append(data_dict)
+        return data_dicts
 
-            for k, v in score_dict.items():
-                if isinstance(v, dict):
-                    for _k, _v in v.items():
-                        v[_k] = self._str_to_digit(_v)
-                else:
-                    score_dict[k] = self._str_to_digit(v)
+    def parse_scores(self, data_dicts):
+        for data_dict in data_dicts:
+            data_dict["arrival_order"] = str_to_digit(data_dict["arrival_order"])
+            data_dict["frame_no"] = str_to_digit(data_dict["frame_no"])
+            data_dict["horse_no"] = str_to_digit(data_dict["horse_no"])
+            data_dict["horse_info"] = self._parse_horse_info(data_dict["horse_info"])
+            data_dict["time"] = self._parse_time(data_dict["time"])
+            data_dict["last_3f_time"] = str_to_digit(data_dict["last_3f_time"])
+            data_dict["passing_order"] = self._parse_passing_order(data_dict["passing_order"])
+            data_dict["jockey_weight"] = str_to_digit(data_dict["jockey_weight"])
+            data_dict["odds"] = str_to_digit(data_dict["odds"])
+            data_dict["popularity"] = str_to_digit(data_dict["popularity"])
+
+            # for k, v in data_dict.items():
+            #     if isinstance(v, dict):
+            #         for _k, _v in v.items():
+            #             v[_k] = self._str_to_digit(_v)
+            #     else:
+            #         data_dict[k] = self._str_to_digit(v)
 
     def _parse_horse_info(self, horse_info):
         s = re.search(re.compile("(牡|牝|せん)(\d+)/(\d+)\(([\+\-]?\d+| \- )\)/(B?)"), horse_info)
@@ -176,11 +216,11 @@ class ResultScaraper(Scraper):
         if s:
             return dict(zip(self.passing_order_labels, s))
 
-    def _to_sec(self, time):
-        base_time = datetime.strptime("00.00.0", "%M.%S.%f")
-        time = datetime.strptime(time, "%M.%S.%f")
-        sec = timedelta.total_seconds(time - base_time)
-        return sec
+    def _parse_time(self, data):
+        time = datetime.strptime("00.00.0", "%M.%S.%f")
+        data = datetime.strptime(data, "%M.%S.%f")
+        data = timedelta.total_seconds(data - time)
+        return data
 
     def _str_to_digit(self, data):
         if not isinstance(data, str):
@@ -226,7 +266,7 @@ class ResultScaraper(Scraper):
         pass
 
 def crawl_result_sites():
-    scraper = ResultScaraper()
+    scraper = RaceResultScaraper()
     base_url = "https://keiba.yahoo.co.jp/race/result/"
 
     for year in range(20, 21):
@@ -281,7 +321,7 @@ def dump_dict_as_json(json_file, data_dict):
         json.dump(data_dict, f, indent=4)
 
 def test_scores(url):
-    scraper = ResultScaraper()
+    scraper = RaceResultScaraper()
     soup = scraper.retrieve_html(url)
     score_dicts = scraper.extract_scores(soup)
     scraper.parse_scores(score_dicts)
@@ -289,7 +329,7 @@ def test_scores(url):
 
 
 def test_racehead(url):
-    scraper = ResultScaraper()
+    scraper = RaceResultScaraper()
     soup = scraper.retrieve_html(url)
     racehead_dict = scraper.extract_racehead(soup)
     scraper.parse_racehead(racehead_dict)
@@ -435,7 +475,7 @@ def parse_loaded_data(data_dict):
         # "horse_b",
         # "arrival_diff",
         "time",
-        # "last3f_time",
+        # "last_3f_time",
         # "passing_order_1st",
         # "passing_order_2nd",
         # "passing_order_3rd",
@@ -516,13 +556,24 @@ def parse_loaded_data(data_dict):
 
 
 def fetch_predicting_data(url):
-    scaraper = ResultScaraper()
+    scaraper = RaceResultScaraper()
     result_dict = fetch_result_site(scaraper, url)
 
     score_and_racehead, _, _ = parse_loaded_data(result_dict)
     return score_and_racehead
 
 
+def test_RaceResultScaraper_extract_racehead():
+    url = 'https://keiba.yahoo.co.jp/race/result/2005040811/'
+    c = Crawler()
+    soup = c.fetch_url(url)
+
+    s = RaceResultScaraper()
+    d = s.extract_scores(soup)
+    s.parse_scores(d)
+    pprint(d)
+
+
+
 if __name__ == "__main__":
-    crawl_result_sites()
-    # test_result_site()
+    test_RaceResultScaraper_extract_racehead()
