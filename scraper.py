@@ -15,7 +15,7 @@ from pprint import pprint
 import numpy as np
 
 from crawler import Crawler
-from utils import *
+from utils import Utils
 
 
 # class Scraper(object):
@@ -96,7 +96,7 @@ class RaceResultScaraper():
         "horse_age",
         "horse_weight",
         "horse_weight_diff",
-        "horse_b",
+        "horse_blinker",
     )
 
     passing_order_labels = (
@@ -145,13 +145,13 @@ class RaceResultScaraper():
         for k, v in racehead_dict.items():
             if isinstance(v, dict):
                 for _k, _v in v.items():
-                    v[_k] = self._str_to_digit(_v)
+                    v[_k] = Utils.str_to_int_or_float(_v)
             else:
-                racehead_dict[k] = self._str_to_digit(v)
+                racehead_dict[k] = Utils.str_to_int_or_float(v)
 
     def extract_scores(self, soup):
         """
-        html(soup)か各馬の結果情報を抽出
+        html(soup)から各馬の結果情報を抽出
         :param soup: BeautifulSoup obj: html
         :return: data_dicts: list of dict
         """
@@ -185,57 +185,62 @@ class RaceResultScaraper():
         return data_dicts
 
     def parse_scores(self, data_dicts):
+        """
+        data_dictの各データを整形して辞書を一次元化
+        :param data_dicts:
+        """
         for data_dict in data_dicts:
-            data_dict["arrival_order"] = str_to_digit(data_dict["arrival_order"])
-            data_dict["frame_no"] = str_to_digit(data_dict["frame_no"])
-            data_dict["horse_no"] = str_to_digit(data_dict["horse_no"])
-            data_dict["horse_info"] = self._parse_horse_info(data_dict["horse_info"])
-            data_dict["time"] = self._parse_time(data_dict["time"])
-            data_dict["last_3f_time"] = str_to_digit(data_dict["last_3f_time"])
-            data_dict["passing_order"] = self._parse_passing_order(data_dict["passing_order"])
-            data_dict["jockey_weight"] = str_to_digit(data_dict["jockey_weight"])
-            data_dict["odds"] = str_to_digit(data_dict["odds"])
-            data_dict["popularity"] = str_to_digit(data_dict["popularity"])
+            data_dict["arrival_order"] = Utils.str_to_int_or_float(data_dict["arrival_order"])
+            data_dict["frame_no"] = Utils.str_to_int_or_float(data_dict["frame_no"])
+            data_dict["horse_no"] = Utils.str_to_int_or_float(data_dict["horse_no"])
+            data_dict["time"] = Utils.str_to_sec(data_dict["time"])
+            data_dict["last_3f_time"] = Utils.str_to_int_or_float(data_dict["last_3f_time"])
+            data_dict["jockey_weight"] = Utils.str_to_int_or_float(data_dict["jockey_weight"])
+            data_dict["odds"] = Utils.str_to_int_or_float(data_dict["odds"])
+            data_dict["popularity"] = Utils.str_to_int_or_float(data_dict["popularity"])
 
-            # for k, v in data_dict.items():
-            #     if isinstance(v, dict):
-            #         for _k, _v in v.items():
-            #             v[_k] = self._str_to_digit(_v)
-            #     else:
-            #         data_dict[k] = self._str_to_digit(v)
+            data_dict.update(self._parse_horse_info(data_dict["horse_info"]))
+            del data_dict["horse_info"]
+            data_dict.update(self._parse_passing_order(data_dict["passing_order"]))
+            del data_dict["passing_order"]
 
     def _parse_horse_info(self, horse_info):
         s = re.search(re.compile("(牡|牝|せん)(\d+)/(\d+)\(([\+\-]?\d+| \- )\)/(B?)"), horse_info)
         if s:
-            return dict(zip(self.horse_info_labels, s.groups()))
+            s = [Utils.str_to_int_or_float(_) for _ in s.groups()]
+            return dict(zip(self.horse_info_labels, s))
         else:
             raise
 
     def _parse_passing_order(self, passing_order):
         s = passing_order.split("-")
-        if s:
-            return dict(zip(self.passing_order_labels, s))
+        if len(s) == 1 and s[0] == "":
+            s = [-1] * 4
+        elif 2 <= len(s) < 4:
+            s.extend([-1] * (4 - len(s)))
+        s = [Utils.str_to_int_or_float(_) for _ in s]
+        return dict(zip(self.passing_order_labels, s))
 
-    def _parse_time(self, data):
-        time = datetime.strptime("00.00.0", "%M.%S.%f")
-        data = datetime.strptime(data, "%M.%S.%f")
-        data = timedelta.total_seconds(data - time)
-        return data
+    # def _parse_time(self, data):
+    #     time = datetime.strptime("00.00.0", "%M.%S.%f")
+    #     data = datetime.strptime(data, "%M.%S.%f")
+    #     data = timedelta.total_seconds(data - time)
+    #     return data
 
-    def _str_to_digit(self, data):
-        if not isinstance(data, str):
-            return data
+    # def _str_to_digit(self, data):
+    #     if not isinstance(data, str):
+    #         return data
 
-        if data == '':
-            data = None
-        elif data.isdigit():
-            data = int(data)
-        else:
-            try:
-                data = float(data)
-            except ValueError:
-                pass
-        return data
+        # if data == '':
+        #     data = None
+        # elif data.isdigit():
+        #     data = int(data)
+        # else:
+        #     try:
+        #         data = float(data)
+        #     except ValueError:
+        #         pass
+        # return data
 
     def _parse_race_no(self, data):
         return re.sub(r"R", "", data)
