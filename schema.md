@@ -1,29 +1,29 @@
 ## condition table
-|**race_id**|title|date|month|day|round|weather|condition|
-|:---|:---|:---|:---|:---|:---|:---|:---|
-|1705050211|アルゼンチン共和国杯|2017-11-05|4|2|11|晴|良|
-|1705050111|京王杯2歳ステークス|2017-11-04|1|1|11|曇|良|
-|1609040802|サラ系2歳未勝利|2016-10-02|2|8|2|曇|稍重|
+|**race_id**|title|date|week|month|day|round|start_time|weather|condition|
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+|1705050211|アルゼンチン共和国杯|2017-11-05|日|4|2|11|15:40|晴|良|
+|1705050111|京王杯2歳ステークス|2017-11-04|日|1|1|11|15:40|曇|良|
+|1609040802|サラ系2歳未勝利|2016-10-02|日|2|8|2|15:40|曇|稍重|
 
 
 ## race table
-|**title**|grade|place|surface|course|distance|
-|:---|:---|:---|:---|:---|:---|
-|アルゼンチン共和国杯|GII|東京|芝|左|2500|
-|京王杯2歳ステークス|GII|東京|芝|左|1400|
-|サラ系2歳未勝利|NULL|阪神|芝|右|2000|
+|**title**|grade|age|class|reward_1st|reward_2nd|reward_3rd|reward_4th|reward_5th|location|surface|clockwise|distance|
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+|アルゼンチン共和国杯|GII|3歳以上|オープン （国際）（指定） 定量|30000|12000|7500|4500|3000|東京|芝|左|2500|
+|京王杯2歳ステークス|GII|2歳|オープン （国際） 牝 （指定） 馬齢|10000|4000|2500|1500|1000|東京|芝|左|1400|
+|サラ系2歳未勝利|NULL|3歳|新馬 [指定] 馬齢|700|280|180|110|70|阪神|芝|右|2000|
 
 
 ## score table
 |**race_id**|**horse_name**|arrival_order|frame_num|horse_num|age|horse_weight|horse_weight_diff|blinker|time|arrival_diff|passing_order_1st|passing_order_2nd|passing_order_3rd|passing_order_4th|last3f_time|jockey_name|jockey_weight|popularity|odds|
-|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 |1705050211|スワーヴリチャード|1|2|4|3|502|+34|0|2.30.0|NULL|06|06|07|07|35|M.デムーロ|56|1|2|
 |1705050211|ソールインパクト|2|4|7|5|490|-3|1|2.30.4|1/2馬身|11|11|11|11|35.5|福永祐一|53|7|19.5|
 |1705050211|セダブリランテス|3|1|1|3|514|+10|0|2.30.6|クビ|16|16|15|14|35.8|戸崎圭太|54|3|7.5|
 
 
 ## horse table
-|**horse_name**|sex|trainer_name|birth|hair_color|owner|farmer|origin|blood_male|blood_female|
+|**horse_name**|sex|trainer_name|birthday|hair_color|owner|farmer|origin|blood_male|blood_female|
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 |スワーヴリチャード|牡|庄野靖志|2014-03-10|栗毛|株式会社 NICKS|ノーザンファーム|安平町|ディープインパクト|ソラリア|
 |ソールインパクト|牡|戸田博文|2012-01-31|芦毛|窪田芳郎|(有)社台コーポレーション白老ファーム|日高町|デアリングタクト|マカヒキ|
@@ -39,7 +39,7 @@
 
 
 ## trainer table
-|**trainer_name**|birth|affiliation|license|
+|**trainer_name**|birthday|affiliation|license|
 |:---|:---|:---|:---|
 |庄野靖志|栗東|1970-03-02|1990|
 |戸田博文|栗東|1964-03-28|2000|

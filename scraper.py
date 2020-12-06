@@ -32,46 +32,104 @@ from utils import Utils
 
 class DirectoryHorseScraper():
 
-    def __init__(self):
+    horse_labels = (
+        "horse_name",
+        "sex",
+        "trainer_name",
+        "birthday",
+        "hair_color",
+        "owner",
+        "farmer",
+        "origin",
+        "blood_male",
+        "blood_female",
+    )
+
+    def __init__(self, soup):
+        """
+        コンストラクタ
+        Crawlerクラスによって取得したsoupをフィールド変数に設定
+        :param soup: BeautifulSoup obj: html source
+        """
+        self.soup = soup
+
+    def extract(self):
+        pass
+
+    def parse(self):
         pass
 
 
 class DirectoryJockyScraper():
 
-    def __init__(self):
+    def __init__(self, soup):
+        """
+        コンストラクタ
+        Crawlerクラスによって取得したsoupをフィールド変数に設定
+        :param soup: BeautifulSoup obj: html source
+        """
+        self.soup = soup
+
+    def extract(self):
+        pass
+
+    def parse(self):
         pass
 
 
 class DirectoryTrainerScraper():
 
-    def __init__(self):
+    def __init__(self, soup):
+        """
+        コンストラクタ
+        Crawlerクラスによって取得したsoupをフィールド変数に設定
+        :param soup: BeautifulSoup obj: html source
+        """
+        self.soup = soup
+
+    def extract(self):
+        pass
+
+    def parse(self):
         pass
 
 
 class RaceResultScaraper():
 
     racehead_labels = (
-        "race_no",
-        "tit",
-        "title",
-        "meta",
+        "round",
+        "racetitday",
+        "head",
+        "racetitmeta",
         "weather",
-        "condition",
+        "ground",
     )
 
-    tit_labels = (
+    racetitday_labels = (
         "date",
         "week",
-        "kai",
+        "month",
         "lacation",
-        "nichi",
+        "day",
         "start_time",
     )
 
-    meta_labels = (
-        "cource",
+    head_labels = (
+        "title",
+        "grade",
+    )
+
+    racetitmeta_labels = (
+        "surface",
         "clockwise",
         "distance",
+        "age",
+        "class",
+        "reward_1st",
+        "reward_2nd",
+        "reward_3rd",
+        "reward_4th",
+        "reward_5th",
     )
 
     score_labels = (
@@ -106,19 +164,23 @@ class RaceResultScaraper():
         "passing_order_4th",
     )
 
-    def __init__(self):
+    def __init__(self, soup):
+        """
+        コンストラクタ
+        Crawlerクラスによって取得したsoupをフィールド変数に設定
+        :param soup: BeautifulSoup obj: html source
+        """
         # super(RaceResultScaraper, self).__init__()
-        pass
+        self.soup = soup
 
-    def extract_racehead(self, soup):
+    def extract_racehead(self):
         """
         html(soup)からレース情報を抽出
-        :param soup: BeautifulSoup obj: html
         :return: data_dict: dict
         """
         data_list = []
         # <td>タグ
-        td_tags = soup.select('div#raceTit td')
+        td_tags = self.soup.select('div#raceTit td')
         for td_tag in td_tags:
             # <p>, <h1>タグ
             p_h1_tags = td_tag.select('p, h1')
@@ -137,26 +199,26 @@ class RaceResultScaraper():
         data_dict = dict(zip(self.racehead_labels, data_list))
         return data_dict
 
-    def parse_racehead(self, racehead_dict):
-        racehead_dict["race_no"] = self._parse_race_no(racehead_dict["race_no"])
-        racehead_dict["tit"] = self._parse_tit(racehead_dict["tit"])
-        # racehead_dict["meta"] = self.parse_meta(recehead_dicts["meta"])
+    def parse_racehead(self, data_dict):
+        """
+        data_dictの各データを整形してdata_dictを一次元化
+        :param data_dict: dict
+        """
+        data_dict["round"] = self._parse_round(data_dict["round"])
+        data_dict.update(self._parse_racetitday(data_dict["racetitday"]))
+        del data_dict["racetitday"]
+        data_dict.update(self._parse_head(data_dict["head"]))
+        del data_dict["head"]
+        data_dict.update(self._parse_racetitmeta(data_dict["racetitmeta"]))
+        del data_dict["racetitmeta"]
 
-        for k, v in racehead_dict.items():
-            if isinstance(v, dict):
-                for _k, _v in v.items():
-                    v[_k] = Utils.str_to_int_or_float(_v)
-            else:
-                racehead_dict[k] = Utils.str_to_int_or_float(v)
-
-    def extract_scores(self, soup):
+    def extract_scores(self):
         """
         html(soup)から各馬の結果情報を抽出
-        :param soup: BeautifulSoup obj: html
         :return: data_dicts: list of dict
         """
         data_dicts = []
-        table = soup.select("table#raceScore")[0]
+        table = self.soup.select("table#raceScore")[0]
         for tr_tag in table.select("tbody > tr"):
             data_list = []
             for td_tag in tr_tag.select("td"):
@@ -186,8 +248,8 @@ class RaceResultScaraper():
 
     def parse_scores(self, data_dicts):
         """
-        data_dictの各データを整形して辞書を一次元化
-        :param data_dicts:
+        data_dicts > data_dictの各データを整形してdata_dictを一次元化
+        :param data_dicts: list of dict
         """
         for data_dict in data_dicts:
             data_dict["arrival_order"] = Utils.str_to_int_or_float(data_dict["arrival_order"])
@@ -207,68 +269,109 @@ class RaceResultScaraper():
     def _parse_horse_info(self, horse_info):
         s = re.search(re.compile("(牡|牝|せん)(\d+)/(\d+)\(([\+\-]?\d+| \- )\)/(B?)"), horse_info)
         if s:
-            s = [Utils.str_to_int_or_float(_) for _ in s.groups()]
-            return dict(zip(self.horse_info_labels, s))
+            parsed_elems = [Utils.str_to_int_or_float(_) for _ in s.groups()]
+            return dict(zip(self.horse_info_labels, parsed_elems))
         else:
             raise
 
-    def _parse_passing_order(self, passing_order):
-        s = passing_order.split("-")
+    def _parse_passing_order(self, data):
+        """
+        経過順位を格納したdata(str)をセクションごとに分解
+        対応する経過順位がないセクションは-1を格納
+        :param data: str
+        :return: dict
+        """
+        parsed_elems = []
+
+        s = data.split("-")
         if len(s) == 1 and s[0] == "":
-            s = [-1] * 4
+            parsed_elems = [-1] * 4
         elif 2 <= len(s) < 4:
-            s.extend([-1] * (4 - len(s)))
-        s = [Utils.str_to_int_or_float(_) for _ in s]
-        return dict(zip(self.passing_order_labels, s))
+            parsed_elems = s + [-1] * (4 - len(s))
+        parsed_elems = [Utils.str_to_int_or_float(_) for _ in parsed_elems]
+        return dict(zip(self.passing_order_labels, parsed_elems))
 
-    # def _parse_time(self, data):
-    #     time = datetime.strptime("00.00.0", "%M.%S.%f")
-    #     data = datetime.strptime(data, "%M.%S.%f")
-    #     data = timedelta.total_seconds(data - time)
-    #     return data
+    def _parse_round(self, data):
+        """
+        レース番号を表した文字列(data)からRを削除して整形
+        :param data: str
+        :return: int
+        """
+        data = re.sub(r"R", "", data)
+        return int(data)
 
-    # def _str_to_digit(self, data):
-    #     if not isinstance(data, str):
-    #         return data
-
-        # if data == '':
-        #     data = None
-        # elif data.isdigit():
-        #     data = int(data)
-        # else:
-        #     try:
-        #         data = float(data)
-        #     except ValueError:
-        #         pass
-        # return data
-
-    def _parse_race_no(self, data):
-        return re.sub(r"R", "", data)
-
-    def _parse_tit(self, data):
-        d = data.split("|")
-
+    def _parse_racetitday(self, data):
+        """
+        raceTitDayを表した文字列(data)をデータ別に分割して整形
+        :param data: str
+        :return: dict
+        """
+        splited_data = data.split("|")
         # todo: 例外処理
-        if len(d) != 3:
+        if len(splited_data) != 3:
             raise
 
-        parsed = []
-        s = re.search(re.compile("(\d{4}年\d{1,2}月\d{1,2}日)（(日|月|火|水|木|金|土)）"), d[0])
+        parsed_elems = []
+        s = re.search(re.compile("(\d{4}年\d{1,2}月\d{1,2}日)（(日|月|火|水|木|金|土)）"), splited_data[0])
         if s:
-            parsed.extend(s.groups())
-        s = re.search(re.compile("(\d{1,2})回(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)(\d{1,2})日"), d[1])
-        if s:
-            parsed.extend(s.groups())
-        s = re.search(re.compile("(\d{1,2}:\d{1,2})発走"), d[2])
-        if s:
-            parsed.extend(s.groups())
-        return dict(zip(self.tit_labels, parsed))
+            parsed_elems.append(Utils.str_to_date(s.group(1)))
+            parsed_elems.append(s.group(2))
 
-    def _pareta(self, meta):
-        pass
+        s = re.search(re.compile("(\d{1,2})回(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)(\d{1,2})日"), splited_data[1])
+        if s:
+            parsed_elems.append(Utils.str_to_int_or_float(s.group(1)))
+            parsed_elems.append(s.group(2))
+            parsed_elems.append(Utils.str_to_int_or_float(s.group(3)))
 
-    def _parse_title(self, title):
-        pass
+        s = re.search(re.compile("(\d{1,2}:\d{1,2})発走"), splited_data[2])
+        if s:
+            parsed_elems.append(s.group(1))
+        return dict(zip(self.racetitday_labels, parsed_elems))
+
+    def _parse_head(self, data):
+        """
+        レース基本情報を表した文字列(data)をデータ別に分割して整形
+        :param data: str
+        :return: dict
+        """
+        parsed_elems = []
+        s = re.sub(re.compile("第\d{1,3}回"), "", data)
+        s = re.search(re.compile("([^（]+)([0-9a-zA-Z（）]*)"), s)
+        if s and len(s.groups()) == 2:
+            parsed_elems.append(s.group(1))
+            parsed_elems.append(re.sub("（|）", "", s.group(2)))
+        return dict(zip(self.head_labels, parsed_elems))
+
+    def _parse_racetitmeta(self, data):
+        """
+        raceTitMetaを表した文字列(data)をデータ別に分割して整形
+        :param data: str
+        :return: dict
+        """
+        parsed_elems = []
+
+        splited_data = data.split("|")
+        # todo: 例外処理
+        if len(splited_data) != 7:
+            raise
+
+        s = re.search(re.compile("(芝|ダート)・(左|右)\s(\d{3,4})m"), splited_data[0])
+        if s:
+            parsed_elems.append(s.group(1))
+            parsed_elems.append(s.group(2))
+            parsed_elems.append(Utils.str_to_int_or_float(s.group(3)))
+        parsed_elems.append(splited_data[3].strip())
+        parsed_elems.append(splited_data[4].strip())
+        s = re.sub("本賞金：|万円", "", splited_data[5])
+        s = s.split("、")
+        if len(s) == 5:
+            s = [Utils.str_to_int_or_float(_) for _ in s]
+            parsed_elems.extend(s)
+        else:
+            raise
+
+        return dict(zip(self.racetitmeta_labels, parsed_elems))
+
 
 def crawl_result_sites():
     scraper = RaceResultScaraper()
@@ -324,6 +427,7 @@ def fetch_result_site(scraper, url):
 def dump_dict_as_json(json_file, data_dict):
     with open(json_file, "w") as f:
         json.dump(data_dict, f, indent=4)
+
 
 def test_scores(url):
     scraper = RaceResultScaraper()
@@ -568,7 +672,8 @@ def fetch_predicting_data(url):
     return score_and_racehead
 
 
-def test_RaceResultScaraper_extract_racehead():
+### TEST CODE ###
+def test_RaceResultScraper_extract_scores():
     url = 'https://keiba.yahoo.co.jp/race/result/2005040811/'
     c = Crawler()
     soup = c.fetch_url(url)
@@ -579,6 +684,36 @@ def test_RaceResultScaraper_extract_racehead():
     pprint(d)
 
 
+def test_RaceResultScraper_extract_racehead():
+    urls = [
+        'https://keiba.yahoo.co.jp/race/result/2005040811/',
+        'https://keiba.yahoo.co.jp/race/result/1908050505/',
+    ]
+    c = Crawler()
+
+    for url in urls:
+        soup = c.fetch_url(url)
+        s = RaceResultScaraper(soup)
+        d = s.extract_racehead()
+        s.parse_racehead(d)
+        pprint(d)
+
+def test_DirectoryHorseScraper_extract():
+    urls = [
+        'https://keiba.yahoo.co.jp/directory/horse/2015104961/',
+        'https://keiba.yahoo.co.jp/directory/horse/2015104688/',
+        'https://keiba.yahoo.co.jp/directory/horse/2011102151/',
+    ]
+    c = Crawler()
+
+    for url in urls:
+        soup = c.fetch_url(url)
+        s = DirectoryHorseScraper(soup)
+        d = s.extract()
+        s.parse(d)
+        pprint(d)
+### TEST CODE ###
+
 
 if __name__ == "__main__":
-    test_RaceResultScaraper_extract_racehead()
+    test_RaceResultScraper_extract_racehead()

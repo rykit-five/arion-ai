@@ -29,6 +29,18 @@ class Utils():
         return data
 
     @staticmethod
+    def str_to_date(data):
+        """
+        日付が"%Y年%m月%d日"フォーマットで格納されたdata(str)を"%Y-%m-%d"フォーマットに変換
+        :param data: str
+        :return: str
+        """
+        if isinstance(data, str):
+            dt_data = datetime.strptime(data, "%Y年%m月%d日")
+            data = dt_data.strftime("%Y-%m-%d")
+        return data
+
+    @staticmethod
     def load_json_as_dict(json_file):
         with open(json_file, "r") as f:
             data_dict = json.load(f)
