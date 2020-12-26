@@ -1,10 +1,39 @@
 import sqlite3
-from sqlite3 import Error
+import logging
+from pprint import pprint
 
 import scraper
 
+### FOT TEST ###
+from scraper import test_RaceResultScraper_extract_racehead
+### FOT TEST ###
 
-class Register:
+class Register_old:
+
+    #    sql_create_score = '''CREATE TABLE IF NOT EXISTS scores (
+    #                             race_id INTEGER,
+    #                             arrival_order INTEGER NOT NULL,
+    #                             frame_no INTEGER NOT NULL,
+    #                             horse_no INTEGER NOT NULL,
+    #                             horse_name TEXT NOT NULL,
+    #                             horse_info TEXT NOT NULL,
+    #                             arrival_diff TEXT,
+    #                             time REAL NOT NULL,
+    #                             last3f_time REAL NOT NULL,
+    #                             passing_order TEXT NOT NULL,
+    #                             jockey_name TEXT NOT NULL,
+    #                             jockey_weight REAL NOT NULL,
+    #                             odds REAL NOT NULL,
+    #                             popularity REAL NOT NULL,
+    #                             trainer_name TEXT NOT NULL,
+    #                             PRIMARY KEY (race_id, horse_name)
+    #                             )'''
+    # #
+    # sql_create_xxx = ''''''
+    # spl_delete_score = '''DROP TABLE IF EXISTS scores'''
+    # sql_insert_xxx = ''''''
+    # sql_select_xxx = ''''''
+
 
     def __init__(self, db_file):
         conn = None
@@ -15,9 +44,10 @@ class Register:
         self.conn = conn
         self.curs = self.conn.cursor()
 
-    def create(self, reset=False):
-        if reset:
-            self.curs.execute('''DROP TABLE IF EXISTS scores''')
+    def create_table(self, trg_table=""):
+        # sql_create = eval("self.sql_create_{}".format(trg_table))
+        sql_create = self.__dict__["self.sql_create_{}".format(trg_table)]
+
         self.curs.execute('''CREATE TABLE IF NOT EXISTS scores (
                                 race_id INTEGER,
                                 arrival_order INTEGER NOT NULL,
@@ -38,11 +68,32 @@ class Register:
                              )''')
         self.conn.commit()
 
-    def close(self):
+    def delete_table(self, table="all"):
+        self.curs.execute('''DROP TABLE IF EXISTS scores''')
+
+
+
+    def close_connect(self):
         self.curs.close()
         self.conn.close()
 
-    def insert(self, score):
+    def insert(self, record, trg_table=""):
+        if trg_table == "condition":
+            self.curs.execute(sql, record)
+            pass
+        elif trg_table == "race":
+            pass
+        elif trg_table == "score":
+            pass
+        elif trg_table == "horse":
+            pass
+        elif trg_table == "jockey":
+            pass
+        elif trg_table == "trainer":
+            pass
+        else:
+            raise
+
         sql = '''INSERT INTO scores (
                     arrival_order,
                     frame_no,
@@ -66,7 +117,134 @@ class Register:
         pass
 
 
-def test_register(score_dicts):
+logger = logging.getLogger(__name__)
+
+
+class Register(object):
+    PRIMARY_KEY = ('id', int)
+
+    def __init__(self, filename, debug, smart_pdate=False):
+        self.db = sqlite3.connect(filename, check_same_thread=False)
+        self.debug = debug
+        # self.smart_update = smart_pdate
+        self.registered = {}
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def _execute(self, sql, args=None):
+        if args is None:
+            if self.debug:
+                logger.debug('%s', sql)
+            return self.db.execute(sql)
+        else:
+            if self.debug:
+                logger.debug('%s %r', sql, args)
+            return self.db.execute(sql, args)
+
+    def commit(self):
+        self.db.commit()
+
+    def close(self):
+        self.db.isolation_level = None
+        self._execute('VACUUM')
+        self.db.close()
+
+    def register(self, table, slots):
+        if table in self.registered.keys():
+            raise TypeError('%s is already registered' % table)
+        self.registered[table] = slots
+
+    def _schema(self, table):
+        if table not in self.registered.keys():
+            raise TypeError('%s was never registered' % table)
+        return self.registered[table]
+
+    def ensure_schema(self, table, slots):
+        """
+        tableがslotsと同じカラム名と型を持つか調査
+         * カラム名が同じで型が異なる場合 -> 例外
+         * カラムが足りない場合           -> テーブルに追加
+         * そもそもテーブルがない場合     -> 作成
+        :param table: str
+        :param slots: list of tuple (str: name, str: type_)
+        :return: None or TypeError
+        """
+        cur = self._execute('PRAGMA table_info(%s)' % table)
+        available = cur.fetchall()
+
+        def column(name, type_, primary=True):
+            if (name, type_) == self.PRIMARY_KEY and primary:
+                return 'INTEGER PRIMARY KEY'
+            elif type_ in (int, bool):
+                return 'INTEGER'
+            elif type_ in (float, ):
+                return 'REAL'
+            elif type_ in (bytes, ):
+                return 'BLOB'
+            else:
+                return 'TEXT'
+
+        if available:
+            available = [(row[1], row[2]) for row in available]
+            modified_slots = [(name, type_) for name, type_ in slots
+                              if name in (name for name, _ in available)
+                              and (name, column(name, type_, primary=False)) not in available]
+            for name, type_ in modified_slots:
+                raise TypeError('Column {} is {}, but expected {}'.format(
+                    name, next(dbtype for n, dbtype in available if n == name), column(name, type_)))
+            missing_slots = [(name, type_) for name, type_ in slots if name not in (n for n, _ in available)]
+            for name, type_ in missing_slots:
+                self._execute('ALTER TABLE %s ADD COLUMN %s %s' % (table, name, column(name, type_)))
+        else:
+            self._execute('CREATE TABLE %s (%s)' % (
+                table, ', '.join('{} {}'.format(name, column(name, type_)) for name, type_ in slots)))
+            self.register(table, slots)
+
+
+    def _update(self, o):
+        # update
+        pass
+
+    def insert(self, table, args):
+        """
+        tableからカラム名(name)を取得してレコード(args)を挿入
+        :param table: str
+        :param args: dict
+        :return: lastrowid
+        """
+        slots = self._schema(table)
+        slots = [(name, type_) for name, type_ in slots if (name, type_) != self.PRIMARY_KEY]
+        names = ', '.join([name for name, _ in slots])
+
+        if len(set(names) & set(args)) > 0:
+            raise KeyError('Args has key {} not defined in the table'.format(', '.join(set(names) - set(slots))))
+
+        # values = [args[name] for name in names]
+        sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table, names, ', '.join('?' * len(slots)), args)
+        return self._execute('INSERT INTO {} ({}) VALUES ({})'.format(table, names, ', '.join('?' * len(slots))), args).lastrowid
+
+    def delete_where(self, o, where):
+        # delete
+        pass
+
+    def query(self, o, select=None, where=None, order_by=None, group_by=None, limit=None):
+        sql = []
+        args = []
+
+
+        pass
+
+    def load(self, o, *args, **kwargs):
+        # insert
+        pass
+
+    def get(self, o, *args, **kwargs):
+        # select
+        pass
+
+
+def test_register():
     db_file = "test_db.sqlite"
     reg = Register(db_file)
     reg.create(reset=False)
@@ -74,7 +252,54 @@ def test_register(score_dicts):
         reg.insert(tuple(score_dict.values()))
 
 
+### TEST CODE ###
+SLOTS_CONDITION = [("id", int),
+                   ("title", str),
+                   ("date", str),
+                   ("week", str),
+                   ("month", int),
+                   ("day", int),
+                   ("round", int),
+                   ("start_time", str),
+                   ("weather", str),
+                   ("condition", str),
+                   ]
+
+SLOTS_RACE = [("title", str),
+              ("grade", str),
+              ("age", str),
+              ("class", str),
+              ("reward_1st", int),
+              ("reward_2nd", int),
+              ("reward_3rd", int),
+              ("reward_4th", int),
+              ("reward_5th", int),
+              ("location", str),
+              ("surface", str),
+              ("clockwise", str),
+              ("distance", int),
+              ]
+
+
+
+def test_create_table():
+    reg = Register("test_db.sqlite", debug=True)
+    reg.ensure_schema("CONDITION", SLOTS_CONDITION)
+    reg.ensure_schema("RACE", SLOTS_RACE)
+
+def test_insert():
+    reg = Register("test_db.sqlite", debug=True)
+    reg.register("CONDITION", SLOTS_CONDITION)
+    reg.register("RACE", SLOTS_RACE)
+    args_list = test_RaceResultScraper_extract_racehead()
+    for args in args_list:
+        name_cond = [name for name, tyep_ in SLOTS_CONDITION]
+        args_condition = [v for k, v in args.items() if k in [name for name, tyep_ in SLOTS_CONDITION]]
+        reg.insert("CONDITION", args_condition)
+        pass
+
+### TEST CODE ###
+
 if __name__ == '__main__':
-    url = "https://keiba.yahoo.co.jp/race/result/1705050211"
-    score_dicts = scraper.test_scraper(url)
-    test_register(score_dicts)
+    # test_create_table()
+    test_insert()

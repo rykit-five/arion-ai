@@ -691,12 +691,15 @@ def test_RaceResultScraper_extract_racehead():
     ]
     c = Crawler()
 
+    args_list = []
     for url in urls:
         soup = c.fetch_url(url)
         s = RaceResultScaraper(soup)
         d = s.extract_racehead()
         s.parse_racehead(d)
         pprint(d)
+        args_list.append(d)
+    return args_list
 
 def test_DirectoryHorseScraper_extract():
     urls = [
