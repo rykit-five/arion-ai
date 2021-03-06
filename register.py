@@ -5,7 +5,7 @@ from pprint import pprint
 import scraper
 
 ### FOT TEST ###
-from scraper import test_RaceResultScraper_extract_racehead
+from scraper import test_RaceResultScraper_extract_racehead, test_RaceResultScraper_extract_scores
 ### FOT TEST ###
 
 class Register_old:
@@ -267,38 +267,65 @@ class Register(object):
 
 
 ### TEST CODE ###
-SLOTS_CONDITION = [#("id", int),
-                   ("title", str),
-                   ("date", str),
-                   ("week", str),
-                   ("month", int),
-                   ("day", int),
-                   ("round", int),
-                   ("start_time", str),
-                   ("weather", str),
-                   ("ground", str),
-                   ]
+SLOT_CONDITION = [
+    #("id", int),
+    ("title", str),
+    ("date", str),
+    ("week", str),
+    ("month", int),
+    ("day", int),
+    ("round", int),
+    ("start_time", str),
+    ("weather", str),
+    ("ground", str),
+]
 
-SLOTS_RACE = [("title", str),
-              ("grade", str),
-              ("age", str),
-              ("class", str),
-              ("reward_1st", int),
-              ("reward_2nd", int),
-              ("reward_3rd", int),
-              ("reward_4th", int),
-              ("reward_5th", int),
-              ("location", str),
-              ("surface", str),
-              ("clockwise", str),
-              ("distance", int),
-              ]
+SLOT_RACE = [
+    ("title", str),
+    ("grade", str),
+    ("age", str),
+    ("class", str),
+    ("reward_1st", int),
+    ("reward_2nd", int),
+    ("reward_3rd", int),
+    ("reward_4th", int),
+    ("reward_5th", int),
+    ("location", str),
+    ("surface", str),
+    ("clockwise", str),
+    ("distance", int),
+]
+
+SLOT_SCORE = [
+    ("arrival_order", int),
+    ("frame_no", int),
+    ("horse_no", int),
+    ("horse_name", str),
+    ("horse_sex", str),
+    ("horse_age", int),
+    ("horse_weight", float),
+    ("horse_weight_diff", float),
+    ("horse_blinker", str),
+    ("time", float),
+    ("arrival_diff", str),
+    ("passing_order_1st", int),
+    ("passing_order_2nd", int),
+    ("passing_order_3rd", int),
+    ("passing_order_4th", int),
+    ("last_3f_time", float),
+    ("jockey_name", str),
+    ("jockey_weight", float),
+    ("popularity", int),
+    ("odds", float),
+    ("trainer_name", str),
+]
 
 
 def test_create_table():
     reg = Register("test_db.sqlite", debug=True)
-    reg.create_table("CONDITION", SLOTS_CONDITION)
-    reg.create_table("RACE", SLOTS_RACE)
+    reg.create_table("CONDITION", SLOT_CONDITION)
+    reg.create_table("RACE", SLOT_RACE)
+    reg.create_table("SCORE", SLOT_SCORE)
     reg.commit()
 
 
@@ -306,6 +333,7 @@ def test_insert():
     reg = Register("test_db.sqlite", debug=True)
     test_insert_condition(reg)
     test_insert_race(reg)
+    test_insert_scores(reg)
 
 
 def test_insert_condition(reg):
@@ -323,10 +351,19 @@ def test_insert_race(reg):
         reg.commit()
 
 
+def test_insert_scores(reg):
+    args_list = test_RaceResultScraper_extract_scores()
+    for args in args_list:
+        for a in args:
+            reg.insert("SCORE", a)
+            reg.commit()
+
+
 def test_delete():
     reg = Register("test_db.sqlite", debug=True)
     reg.delete_table("RACE")
     reg.delete_table("CONDITION")
+
 ### TEST CODE ###
 
 

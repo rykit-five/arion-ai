@@ -687,27 +687,28 @@ URL_HORSE = [
 
 def test_RaceResultScraper_extract_scores():
     c = Crawler()
+    args_list = []
     for url in URL_RESULT:
         soup = c.fetch_url(url)
         s = RaceResultScaraper(soup)
         d = s.extract_scores()
         s.parse_scores(d)
-        pprint(d)
-        print()
-
+        # pprint(d)
+        # print()
+        args_list.append(d)
+    return args_list
 
 
 def test_RaceResultScraper_extract_racehead():
     c = Crawler()
-
     args_list = []
     for url in URL_RESULT:
         soup = c.fetch_url(url)
         s = RaceResultScaraper(soup)
         d = s.extract_racehead()
         s.parse_racehead(d)
-        pprint(d)
-        print()
+        # pprint(d)
+        # print()
         args_list.append(d)
     return args_list
 
@@ -718,8 +719,8 @@ def test_DirectoryHorseScraper_extract():
         s = DirectoryHorseScraper(soup)
         d = s.extract()
         s.parse(d)
-        pprint(d)
-        print()
+        # pprint(d)
+        # print()
 
 ### TEST CODE ###
 

@@ -15,7 +15,7 @@
 
 
 ## score table
-|**race_id**|**horse_name**|arrival_order|frame_num|horse_num|age|horse_weight|horse_weight_diff|blinker|time|arrival_diff|passing_order_1st|passing_order_2nd|passing_order_3rd|passing_order_4th|last3f_time|jockey_name|jockey_weight|popularity|odds|
+|**race_id**|**horse_name**|arrival_order|frame_no|horse_no|age|horse_weight|horse_weight_diff|blinker|time|arrival_diff|passing_order_1st|passing_order_2nd|passing_order_3rd|passing_order_4th|last3f_time|jockey_name|jockey_weight|popularity|odds|
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 |1705050211|スワーヴリチャード|1|2|4|3|502|+34|0|2.30.0|NULL|06|06|07|07|35|M.デムーロ|56|1|2|
 |1705050211|ソールインパクト|2|4|7|5|490|-3|1|2.30.4|1/2馬身|11|11|11|11|35.5|福永祐一|53|7|19.5|
