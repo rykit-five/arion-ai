@@ -109,7 +109,7 @@ class RaceResultScaraper():
         "date",
         "week",
         "month",
-        "lacation",
+        "location",
         "day",
         "start_time",
     )

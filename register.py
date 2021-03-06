@@ -232,7 +232,7 @@ class Register(object):
         # if len(slot_names) != len(arg_names):
             # raise KeyError("Args has key '{}' not defined in the table".format(', '.join(set(slot_names) - set(arg_names))))
 
-        arg_values = tuple([args[sn] for sn in slot_names])
+        arg_values = [args[sn] for sn in slot_names]
         str_names = ', '.join([sn for sn in slot_names])
         # str_values = ', '.join([av for av in arg_values])
         sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table_name, str_names, ', '.join('?' * len(slot_names)))
@@ -295,29 +295,40 @@ SLOTS_RACE = [("title", str),
               ]
 
 
-
 def test_create_table():
     reg = Register("test_db.sqlite", debug=True)
     reg.create_table("CONDITION", SLOTS_CONDITION)
     reg.create_table("RACE", SLOTS_RACE)
+    reg.commit()
+
 
 def test_insert():
     reg = Register("test_db.sqlite", debug=True)
-    # reg.register("CONDITION", SLOTS_CONDITION)
-    # reg.register("RACE", SLOTS_RACE)
+    test_insert_condition(reg)
+    test_insert_race(reg)
+
+
+def test_insert_condition(reg):
     args_list = test_RaceResultScraper_extract_racehead()
     for args in args_list:
         # args_condition = [v for k, v in args.items() if k in [name for name, tyep_ in SLOTS_CONDITION]]
         reg.insert("CONDITION", args)
         reg.commit()
-        pass
+
+
+def test_insert_race(reg):
+    args_list = test_RaceResultScraper_extract_racehead()
+    for args in args_list:
+        reg.insert("RACE", args)
+        reg.commit()
+
 
 def test_delete():
     reg = Register("test_db.sqlite", debug=True)
     reg.delete_table("RACE")
     reg.delete_table("CONDITION")
-
 ### TEST CODE ###
+
 
 if __name__ == '__main__':
     # logging.basicConfig(filename='logfile/logger.log', level=logging.DEBUG)
