@@ -123,7 +123,7 @@ logger = logging.getLogger(__name__)
 class Register(object):
     PRIMARY_KEY = ('id', int)
 
-    def __init__(self, filename, debug, smart_pdate=False):
+    def __init__(self, filename, debug=True, smart_pdate=False):
         self.db = sqlite3.connect(filename, check_same_thread=False)
         self.debug = debug
         # self.smart_update = smart_pdate
@@ -139,7 +139,7 @@ class Register(object):
             return self.db.execute(sql)
         else:
             if self.debug:
-                logger.debug('%s %r', sql, args)
+                logger.debug('%s, %r', sql, args)
             return self.db.execute(sql, args)
 
     def commit(self):
@@ -160,7 +160,16 @@ class Register(object):
             raise TypeError('%s was never registered' % table)
         return self.registered[table]
 
-    def ensure_schema(self, table, slots):
+    def get_slots(self, table_name):
+        sql = 'PRAGMA table_info ({})'.format(table_name)
+        cur = self._execute(sql)
+        rows = cur.fetchall()
+        if len(rows) != 0:
+            return [(r[1], r[2]) for r in rows]
+        else:
+            return []
+
+    def create_table(self, table_name, slots):
         """
         tableがslotsと同じカラム名と型を持つか調査
          * カラム名が同じで型が異なる場合 -> 例外
@@ -170,8 +179,7 @@ class Register(object):
         :param slots: list of tuple (str: name, str: type_)
         :return: None or TypeError
         """
-        cur = self._execute('PRAGMA table_info(%s)' % table)
-        available = cur.fetchall()
+        available = self.get_slots(table_name)
 
         def column(name, type_, primary=True):
             if (name, type_) == self.PRIMARY_KEY and primary:
@@ -185,48 +193,54 @@ class Register(object):
             else:
                 return 'TEXT'
 
-        if available:
-            available = [(row[1], row[2]) for row in available]
-            modified_slots = [(name, type_) for name, type_ in slots
-                              if name in (name for name, _ in available)
-                              and (name, column(name, type_, primary=False)) not in available]
-            for name, type_ in modified_slots:
-                raise TypeError('Column {} is {}, but expected {}'.format(
-                    name, next(dbtype for n, dbtype in available if n == name), column(name, type_)))
-            missing_slots = [(name, type_) for name, type_ in slots if name not in (n for n, _ in available)]
-            for name, type_ in missing_slots:
-                self._execute('ALTER TABLE %s ADD COLUMN %s %s' % (table, name, column(name, type_)))
+        if len(available) != 0:
+            print(available)
+            # modified_slots = [(name, type_) for name, type_ in slots
+            #                   if name in (name for name, _ in available)
+            #                   and (name, column(name, type_, primary=False)) not in available]
+            # for name, type_ in modified_slots:
+            #     raise TypeError('Column {} is {}, but expected {}'.format(
+            #         name, next(dbtype for n, dbtype in available if n == name), column(name, type_)))
+            # missing_slots = [(name, type_) for name, type_ in slots if name not in (n for n, _ in available)]
+            # for name, type_ in missing_slots:
+            #     self._execute('ALTER TABLE %s ADD COLUMN %s %s' % (table_name, name, column(name, type_)))
+            pass
         else:
-            self._execute('CREATE TABLE %s (%s)' % (
-                table, ', '.join('{} {}'.format(name, column(name, type_)) for name, type_ in slots)))
-            self.register(table, slots)
+            sql = 'CREATE TABLE %s (%s)' % (
+                table_name, ', '.join('{} {}'.format(n, column(n, t)) for (n, t) in slots))
+            self._execute(sql)
+            self.register(table_name, slots)
 
 
     def _update(self, o):
         # update
         pass
 
-    def insert(self, table, args):
+    def insert(self, table_name, args):
         """
         tableからカラム名(name)を取得してレコード(args)を挿入
         :param table: str
         :param args: dict
         :return: lastrowid
         """
-        slots = self._schema(table)
-        slots = [(name, type_) for name, type_ in slots if (name, type_) != self.PRIMARY_KEY]
-        names = ', '.join([name for name, _ in slots])
+        slots = self.get_slots(table_name)
+        slots = [(n, t) for n, t in slots if (n, t) != self.PRIMARY_KEY]
 
-        if len(set(names) & set(args)) > 0:
-            raise KeyError('Args has key {} not defined in the table'.format(', '.join(set(names) - set(slots))))
+        # check columns
+        slot_names = [n for (n, t) in slots]
+        arg_names = args.keys()
+        # if len(slot_names) != len(arg_names):
+            # raise KeyError("Args has key '{}' not defined in the table".format(', '.join(set(slot_names) - set(arg_names))))
 
-        # values = [args[name] for name in names]
-        sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table, names, ', '.join('?' * len(slots)), args)
-        return self._execute('INSERT INTO {} ({}) VALUES ({})'.format(table, names, ', '.join('?' * len(slots))), args).lastrowid
+        arg_values = tuple([args[sn] for sn in slot_names])
+        str_names = ', '.join([sn for sn in slot_names])
+        # str_values = ', '.join([av for av in arg_values])
+        sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table_name, str_names, ', '.join('?' * len(slot_names)))
+        return self._execute(sql, arg_values).lastrowid
 
-    def delete_where(self, o, where):
-        # delete
-        pass
+    def delete_table(self, table_name):
+        sql = 'DROP TABLE IF EXISTS {}'.format(table_name)
+        return self._execute(sql)
 
     def query(self, o, select=None, where=None, order_by=None, group_by=None, limit=None):
         sql = []
@@ -244,16 +258,16 @@ class Register(object):
         pass
 
 
-def test_register():
-    db_file = "test_db.sqlite"
-    reg = Register(db_file)
-    reg.create(reset=False)
-    for score_dict in score_dicts:
-        reg.insert(tuple(score_dict.values()))
+# def test_register():
+#     db_file = "test_db.sqlite"
+#     reg = Register(db_file)
+#     reg.create(reset=False)
+#     for score_dict in score_dicts:
+#         reg.insert(tuple(score_dict.values()))
 
 
 ### TEST CODE ###
-SLOTS_CONDITION = [("id", int),
+SLOTS_CONDITION = [#("id", int),
                    ("title", str),
                    ("date", str),
                    ("week", str),
@@ -262,7 +276,7 @@ SLOTS_CONDITION = [("id", int),
                    ("round", int),
                    ("start_time", str),
                    ("weather", str),
-                   ("condition", str),
+                   ("ground", str),
                    ]
 
 SLOTS_RACE = [("title", str),
@@ -284,22 +298,31 @@ SLOTS_RACE = [("title", str),
 
 def test_create_table():
     reg = Register("test_db.sqlite", debug=True)
-    reg.ensure_schema("CONDITION", SLOTS_CONDITION)
-    reg.ensure_schema("RACE", SLOTS_RACE)
+    reg.create_table("CONDITION", SLOTS_CONDITION)
+    reg.create_table("RACE", SLOTS_RACE)
 
 def test_insert():
     reg = Register("test_db.sqlite", debug=True)
-    reg.register("CONDITION", SLOTS_CONDITION)
-    reg.register("RACE", SLOTS_RACE)
+    # reg.register("CONDITION", SLOTS_CONDITION)
+    # reg.register("RACE", SLOTS_RACE)
     args_list = test_RaceResultScraper_extract_racehead()
     for args in args_list:
-        name_cond = [name for name, tyep_ in SLOTS_CONDITION]
-        args_condition = [v for k, v in args.items() if k in [name for name, tyep_ in SLOTS_CONDITION]]
-        reg.insert("CONDITION", args_condition)
+        # args_condition = [v for k, v in args.items() if k in [name for name, tyep_ in SLOTS_CONDITION]]
+        reg.insert("CONDITION", args)
+        reg.commit()
         pass
+
+def test_delete():
+    reg = Register("test_db.sqlite", debug=True)
+    reg.delete_table("RACE")
+    reg.delete_table("CONDITION")
 
 ### TEST CODE ###
 
 if __name__ == '__main__':
-    # test_create_table()
+    # logging.basicConfig(filename='logfile/logger.log', level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
+    test_create_table()
     test_insert()
+    # test_delete()
+

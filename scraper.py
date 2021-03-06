@@ -673,50 +673,57 @@ def fetch_predicting_data(url):
 
 
 ### TEST CODE ###
-def test_RaceResultScraper_extract_scores():
-    url = 'https://keiba.yahoo.co.jp/race/result/2005040811/'
-    c = Crawler()
-    soup = c.fetch_url(url)
+URL_RESULT = [
+    'https://keiba.yahoo.co.jp/race/result/2005040811/',
+    'https://keiba.yahoo.co.jp/race/result/1908050505/',
+]
 
-    s = RaceResultScaraper()
-    d = s.extract_scores(soup)
-    s.parse_scores(d)
-    pprint(d)
+URL_HORSE = [
+    'https://keiba.yahoo.co.jp/directory/horse/2015104961/',
+    'https://keiba.yahoo.co.jp/directory/horse/2015104688/',
+    'https://keiba.yahoo.co.jp/directory/horse/2011102151/',
+]
+
+
+def test_RaceResultScraper_extract_scores():
+    c = Crawler()
+    for url in URL_RESULT:
+        soup = c.fetch_url(url)
+        s = RaceResultScaraper(soup)
+        d = s.extract_scores()
+        s.parse_scores(d)
+        pprint(d)
+        print()
+
 
 
 def test_RaceResultScraper_extract_racehead():
-    urls = [
-        'https://keiba.yahoo.co.jp/race/result/2005040811/',
-        'https://keiba.yahoo.co.jp/race/result/1908050505/',
-    ]
     c = Crawler()
 
     args_list = []
-    for url in urls:
+    for url in URL_RESULT:
         soup = c.fetch_url(url)
         s = RaceResultScaraper(soup)
         d = s.extract_racehead()
         s.parse_racehead(d)
         pprint(d)
+        print()
         args_list.append(d)
     return args_list
 
 def test_DirectoryHorseScraper_extract():
-    urls = [
-        'https://keiba.yahoo.co.jp/directory/horse/2015104961/',
-        'https://keiba.yahoo.co.jp/directory/horse/2015104688/',
-        'https://keiba.yahoo.co.jp/directory/horse/2011102151/',
-    ]
     c = Crawler()
-
-    for url in urls:
+    for url in URL_HORSE:
         soup = c.fetch_url(url)
         s = DirectoryHorseScraper(soup)
         d = s.extract()
         s.parse(d)
         pprint(d)
+        print()
+
 ### TEST CODE ###
 
 
 if __name__ == "__main__":
     test_RaceResultScraper_extract_racehead()
+    test_RaceResultScraper_extract_scores()

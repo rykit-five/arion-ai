@@ -1,5 +1,5 @@
 ## condition table
-|**race_id**|title|date|week|month|day|round|start_time|weather|condition|
+|**race_id**|title|date|week|month|day|round|start_time|weather|ground|
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 |1705050211|アルゼンチン共和国杯|2017-11-05|日|4|2|11|15:40|晴|良|
 |1705050111|京王杯2歳ステークス|2017-11-04|日|1|1|11|15:40|曇|良|

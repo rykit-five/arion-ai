@@ -1,2 +1,7 @@
-/results/
-/models/
+.idea/
+__pycache__/
+venv/
+
+results/
+models/
+
