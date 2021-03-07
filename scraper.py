@@ -18,21 +18,22 @@ from crawler import Crawler
 from utils import Utils
 
 
-# class Scraper(object):
-#
-#     def __init__(self):
-#         pass
-#
-#     def retrieve_html(self, url):
-#         req = requests.get(url)
-#         req.raise_for_status()
-#         soup = BeautifulSoup(req.content, "html.parser")
-#         return soup
+class Scraper(object):
+
+    def __init__(self, url, soup):
+        self.url = url
+        self.soup = soup
+
+    # def retrieve_html(self, url):
+    #     req = requests.get(url)
+    #     req.raise_for_status()
+    #     soup = BeautifulSoup(req.content, "html.parser")
+    #     return soup
 
 
-class DirectoryHorseScraper():
+class DirectoryHorseScraper(Scraper):
 
-    horse_labels = (
+    label_horse = (
         "horse_name",
         "sex",
         "trainer_name",
@@ -45,13 +46,13 @@ class DirectoryHorseScraper():
         "blood_female",
     )
 
-    def __init__(self, soup):
+    def __init__(self, url, soup):
         """
         コンストラクタ
         Crawlerクラスによって取得したsoupをフィールド変数に設定
         :param soup: BeautifulSoup obj: html source
         """
-        self.soup = soup
+        super().__init__(url, soup)
 
     def extract(self):
         pass
@@ -60,15 +61,15 @@ class DirectoryHorseScraper():
         pass
 
 
-class DirectoryJockyScraper():
+class DirectoryJockyScraper(Scraper):
 
-    def __init__(self, soup):
+    def __init__(self, url, soup):
         """
         コンストラクタ
         Crawlerクラスによって取得したsoupをフィールド変数に設定
         :param soup: BeautifulSoup obj: html source
         """
-        self.soup = soup
+        super().__init__(url, soup)
 
     def extract(self):
         pass
@@ -77,15 +78,15 @@ class DirectoryJockyScraper():
         pass
 
 
-class DirectoryTrainerScraper():
+class DirectoryTrainerScraper(Scraper):
 
-    def __init__(self, soup):
+    def __init__(self, url, soup):
         """
         コンストラクタ
         Crawlerクラスによって取得したsoupをフィールド変数に設定
         :param soup: BeautifulSoup obj: html source
         """
-        self.soup = soup
+        super().__init__(url, soup)
 
     def extract(self):
         pass
@@ -94,9 +95,9 @@ class DirectoryTrainerScraper():
         pass
 
 
-class RaceResultScaraper():
+class RaceResultScaraper(Scraper):
 
-    racehead_labels = (
+    label_racehead = (
         "round",
         "racetitday",
         "head",
@@ -105,7 +106,7 @@ class RaceResultScaraper():
         "ground",
     )
 
-    racetitday_labels = (
+    label_racetitday = (
         "date",
         "week",
         "month",
@@ -114,12 +115,12 @@ class RaceResultScaraper():
         "start_time",
     )
 
-    head_labels = (
+    label_head = (
         "title",
         "grade",
     )
 
-    racetitmeta_labels = (
+    label_racetitmeta = (
         "surface",
         "clockwise",
         "distance",
@@ -132,7 +133,7 @@ class RaceResultScaraper():
         "reward_5th",
     )
 
-    score_labels = (
+    label_score = (
         "arrival_order",
         "frame_no",
         "horse_no",
@@ -149,7 +150,7 @@ class RaceResultScaraper():
         "trainer_name",
     )
 
-    horse_info_labels = (
+    label_horse_info = (
         "horse_sex",
         "horse_age",
         "horse_weight",
@@ -157,21 +158,25 @@ class RaceResultScaraper():
         "horse_blinker",
     )
 
-    passing_order_labels = (
+    label_passing_order = (
         "passing_order_1st",
         "passing_order_2nd",
         "passing_order_3rd",
         "passing_order_4th",
     )
 
-    def __init__(self, soup):
+    def __init__(self, url, soup):
         """
         コンストラクタ
         Crawlerクラスによって取得したsoupをフィールド変数に設定
         :param soup: BeautifulSoup obj: html source
         """
-        # super(RaceResultScaraper, self).__init__()
-        self.soup = soup
+        super().__init__(url, soup)
+        s = [e for e in self.url.split("/") if e != ""]
+        if len(s) > 0:
+            self.race_id = (int(s[-1]))
+        else:
+            self.race_id = -1
 
     def extract_racehead(self):
         """
@@ -195,15 +200,16 @@ class RaceResultScaraper():
                 for img_tag in img_tags:
                     data_list.append(img_tag['alt'])
 
-        assert len(self.racehead_labels) == len(data_list)
-        data_dict = dict(zip(self.racehead_labels, data_list))
+        assert len(self.label_racehead) == len(data_list)
+        data_dict = dict(zip(self.label_racehead, data_list))
         return data_dict
 
-    def parse_racehead(self, data_dict):
+    def _parse_racehead(self, data_dict):
         """
         data_dictの各データを整形してdata_dictを一次元化
         :param data_dict: dict
         """
+        data_dict["race_id"] = self.race_id
         data_dict["round"] = self._parse_round(data_dict["round"])
         data_dict.update(self._parse_racetitday(data_dict["racetitday"]))
         del data_dict["racetitday"]
@@ -241,17 +247,18 @@ class RaceResultScaraper():
             if data_list[0] in ["中止", "除外", "取消"]:
                 continue
 
-            assert len(self.score_labels) == len(data_list)
-            data_dict = dict(zip(self.score_labels, data_list))
+            assert len(self.label_score) == len(data_list)
+            data_dict = dict(zip(self.label_score, data_list))
             data_dicts.append(data_dict)
         return data_dicts
 
-    def parse_scores(self, data_dicts):
+    def _parse_scores(self, data_dict_list):
         """
-        data_dicts > data_dictの各データを整形してdata_dictを一次元化
-        :param data_dicts: list of dict
+        data_dict_list > data_dictの各データを整形してdata_dictを一次元化
+        :param data_dict_list: list of dict
         """
-        for data_dict in data_dicts:
+        for data_dict in data_dict_list:
+            data_dict["race_id"] = self.race_id
             data_dict["arrival_order"] = Utils.str_to_int_or_float(data_dict["arrival_order"])
             data_dict["frame_no"] = Utils.str_to_int_or_float(data_dict["frame_no"])
             data_dict["horse_no"] = Utils.str_to_int_or_float(data_dict["horse_no"])
@@ -270,7 +277,7 @@ class RaceResultScaraper():
         s = re.search(re.compile("(牡|牝|せん)(\d+)/(\d+)\(([\+\-]?\d+| \- )\)/(B?)"), horse_info)
         if s:
             parsed_elems = [Utils.str_to_int_or_float(_) for _ in s.groups()]
-            return dict(zip(self.horse_info_labels, parsed_elems))
+            return dict(zip(self.label_horse_info, parsed_elems))
         else:
             raise
 
@@ -289,7 +296,7 @@ class RaceResultScaraper():
         elif 2 <= len(s) < 4:
             parsed_elems = s + [-1] * (4 - len(s))
         parsed_elems = [Utils.str_to_int_or_float(_) for _ in parsed_elems]
-        return dict(zip(self.passing_order_labels, parsed_elems))
+        return dict(zip(self.label_passing_order, parsed_elems))
 
     def _parse_round(self, data):
         """
@@ -316,17 +323,17 @@ class RaceResultScaraper():
         if s:
             parsed_elems.append(Utils.str_to_date(s.group(1)))
             parsed_elems.append(s.group(2))
-
         s = re.search(re.compile("(\d{1,2})回(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)(\d{1,2})日"), splited_data[1])
         if s:
             parsed_elems.append(Utils.str_to_int_or_float(s.group(1)))
             parsed_elems.append(s.group(2))
             parsed_elems.append(Utils.str_to_int_or_float(s.group(3)))
-
         s = re.search(re.compile("(\d{1,2}:\d{1,2})発走"), splited_data[2])
         if s:
             parsed_elems.append(s.group(1))
-        return dict(zip(self.racetitday_labels, parsed_elems))
+
+        assert len(self.label_racetitday) == len(parsed_elems)
+        return dict(zip(self.label_racetitday, parsed_elems))
 
     def _parse_head(self, data):
         """
@@ -340,7 +347,7 @@ class RaceResultScaraper():
         if s and len(s.groups()) == 2:
             parsed_elems.append(s.group(1))
             parsed_elems.append(re.sub("（|）", "", s.group(2)))
-        return dict(zip(self.head_labels, parsed_elems))
+        return dict(zip(self.label_head, parsed_elems))
 
     def _parse_racetitmeta(self, data):
         """
@@ -370,9 +377,10 @@ class RaceResultScaraper():
         else:
             raise
 
-        return dict(zip(self.racetitmeta_labels, parsed_elems))
+        return dict(zip(self.label_racetitmeta, parsed_elems))
 
 
+"""
 def crawl_result_sites():
     scraper = RaceResultScaraper()
     base_url = "https://keiba.yahoo.co.jp/race/result/"
@@ -451,6 +459,7 @@ def test_result_site():
     pprint(score_dicts)
     racehead_dict = test_racehead(url)
     pprint(racehead_dict)
+"""
 
 
 def parse_week(data):
@@ -690,9 +699,9 @@ def test_RaceResultScraper_extract_scores():
     args_list = []
     for url in URL_RESULT:
         soup = c.fetch_url(url)
-        s = RaceResultScaraper(soup)
+        s = RaceResultScaraper(url, soup)
         d = s.extract_scores()
-        s.parse_scores(d)
+        s._parse_scores(d)
         # pprint(d)
         # print()
         args_list.append(d)
@@ -704,9 +713,9 @@ def test_RaceResultScraper_extract_racehead():
     args_list = []
     for url in URL_RESULT:
         soup = c.fetch_url(url)
-        s = RaceResultScaraper(soup)
+        s = RaceResultScaraper(url, soup)
         d = s.extract_racehead()
-        s.parse_racehead(d)
+        s._parse_racehead(d)
         # pprint(d)
         # print()
         args_list.append(d)
@@ -716,7 +725,7 @@ def test_DirectoryHorseScraper_extract():
     c = Crawler()
     for url in URL_HORSE:
         soup = c.fetch_url(url)
-        s = DirectoryHorseScraper(soup)
+        s = DirectoryHorseScraper(url, soup)
         d = s.extract()
         s.parse(d)
         # pprint(d)

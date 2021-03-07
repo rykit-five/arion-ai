@@ -121,10 +121,10 @@ logger = logging.getLogger(__name__)
 
 
 class Register(object):
-    PRIMARY_KEY = ('id', int)
 
-    def __init__(self, filename, debug=True, smart_pdate=False):
+    def __init__(self, filename, primary_key, debug=True, smart_pdate=False):
         self.db = sqlite3.connect(filename, check_same_thread=False)
+        self.primary_key = primary_key
         self.debug = debug
         # self.smart_update = smart_pdate
         self.registered = {}
@@ -140,7 +140,10 @@ class Register(object):
         else:
             if self.debug:
                 logger.debug('%s, %r', sql, args)
-            return self.db.execute(sql, args)
+            if isinstance(args, list):
+                return self.db.executemany(sql, args)
+            else:
+                return self.db.execute(sql, args)
 
     def commit(self):
         self.db.commit()
@@ -169,7 +172,7 @@ class Register(object):
         else:
             return []
 
-    def create_table(self, table_name, slots):
+    def create_table(self, table_name, slots, primary_keys):
         """
         tableがslotsと同じカラム名と型を持つか調査
          * カラム名が同じで型が異なる場合 -> 例外
@@ -181,14 +184,12 @@ class Register(object):
         """
         available = self.get_slots(table_name)
 
-        def column(name, type_, primary=True):
-            if (name, type_) == self.PRIMARY_KEY and primary:
-                return 'INTEGER PRIMARY KEY'
-            elif type_ in (int, bool):
+        def sub_type(type_):
+            if type_ in [int, bool]:
                 return 'INTEGER'
-            elif type_ in (float, ):
+            elif type_ in [float, ]:
                 return 'REAL'
-            elif type_ in (bytes, ):
+            elif type_ in [bytes, ]:
                 return 'BLOB'
             else:
                 return 'TEXT'
@@ -206,8 +207,10 @@ class Register(object):
             #     self._execute('ALTER TABLE %s ADD COLUMN %s %s' % (table_name, name, column(name, type_)))
             pass
         else:
-            sql = 'CREATE TABLE %s (%s)' % (
-                table_name, ', '.join('{} {}'.format(n, column(n, t)) for (n, t) in slots))
+            sql = 'CREATE TABLE %s (%s, PRIMARY KEY(%s))' % (
+                table_name,
+                ', '.join('{} {}'.format(n, sub_type(t)) for (n, t) in slots),
+                ', '.join('{}'.format(n) for (n, t) in slots if (n, t) in primary_keys))
             self._execute(sql)
             self.register(table_name, slots)
 
@@ -224,7 +227,7 @@ class Register(object):
         :return: lastrowid
         """
         slots = self.get_slots(table_name)
-        slots = [(n, t) for n, t in slots if (n, t) != self.PRIMARY_KEY]
+        # slots = [(n, t) for n, t in slots if (n, t) != self.PRIMARY_KEY]
 
         # check columns
         slot_names = [n for (n, t) in slots]
@@ -232,7 +235,7 @@ class Register(object):
         # if len(slot_names) != len(arg_names):
             # raise KeyError("Args has key '{}' not defined in the table".format(', '.join(set(slot_names) - set(arg_names))))
 
-        arg_values = [args[sn] for sn in slot_names]
+        arg_values = tuple([args[sn] for sn in slot_names])
         str_names = ', '.join([sn for sn in slot_names])
         # str_values = ', '.join([av for av in arg_values])
         sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table_name, str_names, ', '.join('?' * len(slot_names)))
@@ -267,8 +270,14 @@ class Register(object):
 
 
 ### TEST CODE ###
+PRIMARY_KEY = [
+    ("race_id", int),
+    ("title", str),
+    ("horse_name", str),
+]
+
 SLOT_CONDITION = [
-    #("id", int),
+    ("race_id", int),
     ("title", str),
     ("date", str),
     ("week", str),
@@ -278,6 +287,10 @@ SLOT_CONDITION = [
     ("start_time", str),
     ("weather", str),
     ("ground", str),
+]
+
+PRIMARY_KEY_CONDITION = [
+    ("race_id", int),
 ]
 
 SLOT_RACE = [
@@ -296,7 +309,12 @@ SLOT_RACE = [
     ("distance", int),
 ]
 
+PRIMARY_KEY_RACE = [
+    ("title", str),
+]
+
 SLOT_SCORE = [
+    ("race_id", int),
     ("arrival_order", int),
     ("frame_no", int),
     ("horse_no", int),
@@ -320,17 +338,22 @@ SLOT_SCORE = [
     ("trainer_name", str),
 ]
 
+PRIMARY_KEY_SCORE = [
+    ("race_id", int),
+    ("horse_name", str),
+]
+
 
 def test_create_table():
-    reg = Register("test_db.sqlite", debug=True)
-    reg.create_table("CONDITION", SLOT_CONDITION)
-    reg.create_table("RACE", SLOT_RACE)
-    reg.create_table("SCORE", SLOT_SCORE)
+    reg = Register("test_db.sqlite", PRIMARY_KEY, debug=True)
+    reg.create_table("CONDITION", SLOT_CONDITION, PRIMARY_KEY_CONDITION)
+    reg.create_table("RACE", SLOT_RACE, PRIMARY_KEY_RACE)
+    reg.create_table("SCORE", SLOT_SCORE, PRIMARY_KEY_SCORE)
     reg.commit()
 
 
 def test_insert():
-    reg = Register("test_db.sqlite", debug=True)
+    reg = Register("test_db.sqlite", PRIMARY_KEY, debug=True)
     test_insert_condition(reg)
     test_insert_race(reg)
     test_insert_scores(reg)
@@ -360,9 +383,10 @@ def test_insert_scores(reg):
 
 
 def test_delete():
-    reg = Register("test_db.sqlite", debug=True)
+    reg = Register("test_db.sqlite", PRIMARY_KEY, debug=True)
     reg.delete_table("RACE")
     reg.delete_table("CONDITION")
+    reg.delete_table("SCORE")
 
 ### TEST CODE ###
 
@@ -370,7 +394,13 @@ def test_delete():
 if __name__ == '__main__':
     # logging.basicConfig(filename='logfile/logger.log', level=logging.DEBUG)
     logging.basicConfig(level=logging.DEBUG)
-    test_create_table()
-    test_insert()
-    # test_delete()
+
+    reset = False
+
+    if reset:
+        test_delete()
+    else:
+        test_create_table()
+        test_insert()
+
 

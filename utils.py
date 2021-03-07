@@ -41,6 +41,11 @@ class Utils():
         return data
 
     @staticmethod
+    def sub_int_or_float_error(data):
+
+        pass
+
+    @staticmethod
     def load_json_as_dict(json_file):
         with open(json_file, "r") as f:
             data_dict = json.load(f)
